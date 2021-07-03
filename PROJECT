@@ -1,0 +1,10 @@
+domain: my.domain
+repo: github.com/microcumulus/oauth2-proxy-controller
+resources:
+- group: microcumul.us
+  kind: OAuth2ClientProvider
+  version: v1beta1
+- group: microcumul.us
+  kind: OAuth2Proxy
+  version: v1beta1
+version: "2"

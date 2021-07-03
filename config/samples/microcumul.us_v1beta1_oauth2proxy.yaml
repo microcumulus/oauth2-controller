@@ -1,0 +1,7 @@
+apiVersion: microcumul.us.my.domain/v1beta1
+kind: OAuth2Proxy
+metadata:
+  name: oauth2proxy-sample
+spec:
+  # Add fields here
+  foo: bar

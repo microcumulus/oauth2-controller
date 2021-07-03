@@ -1,0 +1,7 @@
+apiVersion: microcumul.us.my.domain/v1beta1
+kind: OAuth2ClientProvider
+metadata:
+  name: oauth2clientprovider-sample
+spec:
+  # Add fields here
+  foo: bar

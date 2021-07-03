@@ -26,8 +26,11 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	microcumulusv1beta1 "github.com/microcumulus/oauth2-proxy-controller/api/v1beta1"
-	"github.com/microcumulus/oauth2-proxy-controller/controllers"
+	microcumulusv1beta1 "github.com/microcumulus/oauth2-controller/api/v1beta1"
+	"github.com/microcumulus/oauth2-controller/controllers"
+
+	microcumulusv1beta1 "github.com/microcumulus/oauth2-controller/api/v1beta1"
+	"github.com/microcumulus/oauth2-controller/controllers"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -88,6 +91,14 @@ func main() {
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ClusterOAuth2ClientProvider")
+		os.Exit(1)
+	}
+	if err = (&controllers.OAuth2ClientReconciler{
+		Client: mgr.GetClient(),
+		Log:    ctrl.Log.WithName("controllers").WithName("OAuth2Client"),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "OAuth2Client")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder

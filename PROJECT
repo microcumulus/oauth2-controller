@@ -1,5 +1,5 @@
 domain: my.domain
-repo: github.com/microcumulus/oauth2-proxy-controller
+repo: github.com/microcumulus/oauth2-controller
 resources:
 - group: microcumul.us
   kind: OAuth2ClientProvider
@@ -9,5 +9,8 @@ resources:
   version: v1beta1
 - group: microcumul.us
   kind: ClusterOAuth2ClientProvider
+  version: v1beta1
+- group: microcumul.us
+  kind: OAuth2Client
   version: v1beta1
 version: "2"

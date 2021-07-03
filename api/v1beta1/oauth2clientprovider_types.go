@@ -17,6 +17,7 @@ limitations under the License.
 package v1beta1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -29,11 +30,38 @@ type OAuth2ClientProviderSpec struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
 	// Foo is an example field of OAuth2ClientProvider. Edit OAuth2ClientProvider_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	Keycloak *KeycloakProvider `json:"keycloak"`
+}
+
+// KeycloakProvider holds the necessary data to create OAuth2 clients
+type KeycloakProvider struct {
+	// BaseURL is the externally-accessible base URL for the keycloak server
+	BaseURL string `json:"baseURL"`
+	// Realm is the keycloak Realm for which we have credentials and will provision clients.
+	Realm string `json:"realm"`
+	// User is the service account user to use for provisioning clients
+	User string `json:"user"`
+	// Password is a reference to a secret key in this namespace that holds the
+	// password value for the user.
+	Password *corev1.SecretKeySelector `json:"password"`
+}
+
+type UserAuth struct {
+	Username string                    `json:"username"`
+	Password *corev1.SecretKeySelector `json:"password"`
+}
+
+// ClientAuth allows the use of a keycloak client that has a ServiceAccount
+// enabled with an admin role. See
+// https://github.com/keycloak/keycloak-documentation/blob/b572fcff07950ac8c05c0d2f9e395234aea63cdd/server_admin/topics/clients/oidc/service-accounts.adoc
+type ClientAuth struct {
+	ClientID     string                    `json:"clientID"`
+	ClientSecret *corev1.SecretKeySelector `json:"clientSecret"`
 }
 
 // OAuth2ClientProviderStatus defines the observed state of OAuth2ClientProvider
 type OAuth2ClientProviderStatus struct {
+	ClientID string `json:"client_id"`
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 }

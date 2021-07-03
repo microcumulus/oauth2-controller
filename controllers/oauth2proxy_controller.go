@@ -24,7 +24,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	microcumulusv1beta1 "github.com/microcumulus/oauth2-proxy-controller/api/v1beta1"
+	microcumulusv1beta1 "github.com/microcumulus/oauth2-controller/api/v1beta1"
 )
 
 // OAuth2ProxyReconciler reconciles a OAuth2Proxy object

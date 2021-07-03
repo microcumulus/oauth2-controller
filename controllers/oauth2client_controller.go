@@ -27,27 +27,27 @@ import (
 	microcumulusv1beta1 "github.com/microcumulus/oauth2-controller/api/v1beta1"
 )
 
-// ClusterOAuth2ClientProviderReconciler reconciles a ClusterOAuth2ClientProvider object
-type ClusterOAuth2ClientProviderReconciler struct {
+// OAuth2ClientReconciler reconciles a OAuth2Client object
+type OAuth2ClientReconciler struct {
 	client.Client
 	Log    logr.Logger
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=microcumul.us.my.domain,resources=clusteroauth2clientproviders,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=microcumul.us.my.domain,resources=clusteroauth2clientproviders/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=microcumul.us.my.domain,resources=oauth2clients,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=microcumul.us.my.domain,resources=oauth2clients/status,verbs=get;update;patch
 
-func (r *ClusterOAuth2ClientProviderReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
+func (r *OAuth2ClientReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	_ = context.Background()
-	_ = r.Log.WithValues("clusteroauth2clientprovider", req.NamespacedName)
+	_ = r.Log.WithValues("oauth2client", req.NamespacedName)
 
 	// your logic here
 
 	return ctrl.Result{}, nil
 }
 
-func (r *ClusterOAuth2ClientProviderReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *OAuth2ClientReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&microcumulusv1beta1.ClusterOAuth2ClientProvider{}).
+		For(&microcumulusv1beta1.OAuth2Client{}).
 		Complete(r)
 }

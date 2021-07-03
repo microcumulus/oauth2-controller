@@ -30,7 +30,9 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	microcumulusv1beta1 "github.com/microcumulus/oauth2-proxy-controller/api/v1beta1"
+	microcumulusv1beta1 "github.com/microcumulus/oauth2-controller/api/v1beta1"
+
+	microcumulusv1beta1 "github.com/microcumulus/oauth2-controller/api/v1beta1"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -61,6 +63,9 @@ var _ = BeforeSuite(func(done Done) {
 	cfg, err = testEnv.Start()
 	Expect(err).ToNot(HaveOccurred())
 	Expect(cfg).ToNot(BeNil())
+
+	err = microcumulusv1beta1.AddToScheme(scheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
 
 	err = microcumulusv1beta1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())

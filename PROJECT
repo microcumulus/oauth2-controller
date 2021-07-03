@@ -7,4 +7,7 @@ resources:
 - group: microcumul.us
   kind: OAuth2Proxy
   version: v1beta1
+- group: microcumul.us
+  kind: ClusterOAuth2ClientProvider
+  version: v1beta1
 version: "2"

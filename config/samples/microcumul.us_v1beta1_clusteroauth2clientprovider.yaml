@@ -1,0 +1,7 @@
+apiVersion: microcumul.us.my.domain/v1beta1
+kind: ClusterOAuth2ClientProvider
+metadata:
+  name: clusteroauth2clientprovider-sample
+spec:
+  # Add fields here
+  foo: bar

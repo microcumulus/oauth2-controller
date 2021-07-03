@@ -82,6 +82,14 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "OAuth2Proxy")
 		os.Exit(1)
 	}
+	if err = (&controllers.ClusterOAuth2ClientProviderReconciler{
+		Client: mgr.GetClient(),
+		Log:    ctrl.Log.WithName("controllers").WithName("ClusterOAuth2ClientProvider"),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "ClusterOAuth2ClientProvider")
+		os.Exit(1)
+	}
 	// +kubebuilder:scaffold:builder
 
 	setupLog.Info("starting manager")

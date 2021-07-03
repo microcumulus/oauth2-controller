@@ -1,0 +1,24 @@
+# permissions for end users to edit clusteroauth2clientproviders.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: clusteroauth2clientprovider-editor-role
+rules:
+- apiGroups:
+  - microcumul.us.my.domain
+  resources:
+  - clusteroauth2clientproviders
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - microcumul.us.my.domain
+  resources:
+  - clusteroauth2clientproviders/status
+  verbs:
+  - get

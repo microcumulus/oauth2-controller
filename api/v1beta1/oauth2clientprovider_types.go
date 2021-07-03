@@ -29,7 +29,7 @@ type OAuth2ClientProviderSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// Foo is an example field of OAuth2ClientProvider. Edit OAuth2ClientProvider_types.go to remove/update
+	// Keycloak providers can provision oauth2 clients from openid connect
 	Keycloak *KeycloakProvider `json:"keycloak"`
 }
 
@@ -39,13 +39,15 @@ type KeycloakProvider struct {
 	BaseURL string `json:"baseURL"`
 	// Realm is the keycloak Realm for which we have credentials and will provision clients.
 	Realm string `json:"realm"`
-	// User is the service account user to use for provisioning clients
-	User string `json:"user"`
-	// Password is a reference to a secret key in this namespace that holds the
-	// password value for the user.
-	Password *corev1.SecretKeySelector `json:"password"`
+	// UserAuth allows the provider code to authenticate with a keycloak user/password
+	UserAuth *UserAuth
+	// ClientAuth allows the provider code to authenticate with a keycloak client
+	// credential grant
+	ClientAuth *ClientAuth
 }
 
+// UserAuth allows the provider to authenticate with a known keycloak user/pass
+// combination. Must have admin permissions.
 type UserAuth struct {
 	Username string                    `json:"username"`
 	Password *corev1.SecretKeySelector `json:"password"`
@@ -61,9 +63,10 @@ type ClientAuth struct {
 
 // OAuth2ClientProviderStatus defines the observed state of OAuth2ClientProvider
 type OAuth2ClientProviderStatus struct {
-	ClientID string `json:"client_id"`
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+	Reason string `json:"state,omitempty"`
+	Ready  bool   `json:"ready"`
 }
 
 // +kubebuilder:object:root=true

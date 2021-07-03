@@ -31,8 +31,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	microcumulusv1beta1 "github.com/microcumulus/oauth2-controller/api/v1beta1"
-
-	microcumulusv1beta1 "github.com/microcumulus/oauth2-controller/api/v1beta1"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -52,7 +50,8 @@ func TestAPIs(t *testing.T) {
 }
 
 var _ = BeforeSuite(func(done Done) {
-	logf.SetLogger(zap.LoggerTo(GinkgoWriter, true))
+	// logf.SetLogger(zap.LoggerTo(GinkgoWriter, true))
+	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{

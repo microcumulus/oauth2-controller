@@ -37,7 +37,7 @@ type ClusterOAuth2ClientProviderReconciler struct {
 // +kubebuilder:rbac:groups=microcumul.us.my.domain,resources=clusteroauth2clientproviders,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=microcumul.us.my.domain,resources=clusteroauth2clientproviders/status,verbs=get;update;patch
 
-func (r *ClusterOAuth2ClientProviderReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
+func (r *ClusterOAuth2ClientProviderReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	_ = context.Background()
 	_ = r.Log.WithValues("clusteroauth2clientprovider", req.NamespacedName)
 

@@ -28,9 +28,6 @@ import (
 
 	microcumulusv1beta1 "github.com/microcumulus/oauth2-controller/api/v1beta1"
 	"github.com/microcumulus/oauth2-controller/controllers"
-
-	microcumulusv1beta1 "github.com/microcumulus/oauth2-controller/api/v1beta1"
-	"github.com/microcumulus/oauth2-controller/controllers"
 	// +kubebuilder:scaffold:imports
 )
 

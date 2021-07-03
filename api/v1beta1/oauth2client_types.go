@@ -17,25 +17,32 @@ limitations under the License.
 package v1beta1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
 // OAuth2ClientSpec defines the desired state of OAuth2Client
 type OAuth2ClientSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// Provider references the Oauth2ClientProvider or
+	// ClusterOauth2ClientProvider that should provision this client.
+	Provider corev1.ObjectReference `json:"provider"`
 
-	// Foo is an example field of OAuth2Client. Edit OAuth2Client_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	// ClientID is the optional clientid that the client should have.
+	ClientID string `json:"clientID,omitempty"`
+
+	// SecretName is the desired secret that should hold the provisioned client's metadata
+	SecretName string `json:"secretName"`
+
+	// Redirects is the list of valid redirects for this Client
+	Redirects []string `json:"redirects"`
 }
 
 // OAuth2ClientStatus defines the observed state of OAuth2Client
 type OAuth2ClientStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+	Reason string `json:"state,omitempty"`
+	Ready  bool   `json:"ready"`
 }
 
 // +kubebuilder:object:root=true

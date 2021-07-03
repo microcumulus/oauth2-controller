@@ -28,14 +28,15 @@ type ClusterOAuth2ClientProviderSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// Foo is an example field of ClusterOAuth2ClientProvider. Edit ClusterOAuth2ClientProvider_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	Keycloak *KeycloakProvider `json:"keycloak"`
 }
 
 // ClusterOAuth2ClientProviderStatus defines the observed state of ClusterOAuth2ClientProvider
 type ClusterOAuth2ClientProviderStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+	Reason string `json:"state,omitempty"`
+	Ready  bool   `json:"ready"`
 }
 
 // +kubebuilder:object:root=true

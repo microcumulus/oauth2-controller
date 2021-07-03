@@ -37,7 +37,7 @@ type OAuth2ClientReconciler struct {
 // +kubebuilder:rbac:groups=microcumul.us.my.domain,resources=oauth2clients,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=microcumul.us.my.domain,resources=oauth2clients/status,verbs=get;update;patch
 
-func (r *OAuth2ClientReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
+func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	_ = context.Background()
 	_ = r.Log.WithValues("oauth2client", req.NamespacedName)
 

@@ -18,12 +18,18 @@ package controllers
 
 import (
 	"context"
+	"fmt"
+	"log"
 
 	"github.com/go-logr/logr"
+	"github.com/opentracing/opentracing-go"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/microcumulus/oauth2-controller/api/v1beta1"
 	microcumulusv1beta1 "github.com/microcumulus/oauth2-controller/api/v1beta1"
 )
 
@@ -34,14 +40,53 @@ type OAuth2ClientReconciler struct {
 	Scheme *runtime.Scheme
 }
 
+var kube kubernetes.Interface
+
+func init() {
+	conf, err := rest.InClusterConfig()
+	if err != nil {
+		log.Fatal(err)
+	}
+	kube, err = kubernetes.NewForConfig(conf)
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
 // +kubebuilder:rbac:groups=microcumul.us.my.domain,resources=oauth2clients,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=microcumul.us.my.domain,resources=oauth2clients/status,verbs=get;update;patch
 
-func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = context.Background()
-	_ = r.Log.WithValues("oauth2client", req.NamespacedName)
+func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res ctrl.Result, err error) {
+	sp, ctx := opentracing.StartSpanFromContext(ctx, "OAuth2ClientReconciler.Reconcile")
+	defer sp.Finish()
+	defer func() {
+		if err != nil {
+			sp.SetTag("error", true)
+			sp.LogKV("error", err)
+		}
+	}()
+	// lg := r.Log.WithValues("oauth2client", req.NamespacedName)
 
 	// your logic here
+	var c v1beta1.OAuth2Client
+	err = r.Get(ctx, req.NamespacedName, &c)
+	if err != nil {
+		return ctrl.Result{
+			Requeue: true,
+			// RequeueAfter: 30 * time.Second,
+		}, fmt.Errorf("couldn't get client body: %w", err)
+	}
+
+	var prov v1beta1.ClusterOAuth2ClientProvider
+	err = r.Get(ctx, client.ObjectKey{
+		Name:      c.Spec.Provider.Name,
+		Namespace: "",
+	}, &prov)
+	if err != nil {
+		return res, fmt.Errorf("error getting given clusterprovider %s: %w", c.Spec.Provider.Name, err)
+	}
+
+	// TODO actually create the client
 
 	return ctrl.Result{}, nil
 }

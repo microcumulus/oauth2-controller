@@ -22,6 +22,7 @@ type ProxyOpts struct {
 	CustomBanner string            `json:"customBanner,omitempty"`
 	EmailDomain  string            `json:"emailDomain,omitempty"`
 	Annotations  map[string]string `json:"annotations,omitempty"`
+	Target       Target            `json:"target"`
 }
 
 // ProxySessionStore is required, and configures the way that the oauth2-proxy
@@ -53,20 +54,35 @@ type PlainRedis struct {
 	URL      string `json:"url,omitempty"`
 }
 
+type Target struct {
+	Ingress *networkv1.Ingress
+	Service *corev1.Service
+}
+
 // type CookieSessionStore struct {
 // }
 
 // SetupEnv does the work to set up secrets, and returns the kubernetes Env
 // spec for accessing the values it set up, with the varialbe names the
 // oauth2-proxy container expects them in.
-func (po ProxyOpts) SetupEnv(ctx context.Context, cs kubernetes.Interface, ing *networkv1.Ingress, oClient *OIDCClient, c *gocloak.Client) ([]corev1.EnvVar, error) {
+func (po ProxyOpts) SetupEnv(ctx context.Context, cs kubernetes.Interface, oClient *OIDCClient, c *gocloak.Client) ([]corev1.EnvVar, error) {
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "ProxyOpts.SetupEnv")
 	defer sp.Finish()
 
-	be := ing.Spec.Rules[0].HTTP.Paths[0].Backend
-	up := be.Service.Name
-	if be.Service.Port.Number != 80 {
-		up += fmt.Sprintf(":%d", be.Service.Port.Number)
+	var up, ns, n string
+	switch {
+	case po.Target.Ingress != nil:
+		ns = po.Target.Ingress.Namespace
+		be := po.Target.Ingress.Spec.Rules[0].HTTP.Paths[0].Backend
+		n = be.Service.Name
+
+		up = fmt.Sprintf("%s.%s", n, ns)
+		if be.Service.Port.Number != 80 {
+			up += fmt.Sprintf(":%d", be.Service.Port.Number)
+		}
+	case po.Target.Service != nil:
+		ns, n = po.Target.Service.Namespace, po.Target.Service.Name
+		up = fmt.Sprintf("%s.%s:%s", n, ns, &po.Target.Service.Spec.Ports[0].TargetPort)
 	}
 
 	bs := make([]byte, 16)
@@ -101,10 +117,10 @@ func (po ProxyOpts) SetupEnv(ctx context.Context, cs kubernetes.Interface, ing *
 		secData[k] = []byte(v)
 	}
 
-	_, err := cs.CoreV1().Secrets(ing.Namespace).Create(ctx, &corev1.Secret{
+	_, err := cs.CoreV1().Secrets(ns).Create(ctx, &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      *c.Name,
-			Namespace: ing.Namespace,
+			Namespace: ns,
 		},
 		Data: secData,
 	}, metav1.CreateOptions{})
@@ -135,7 +151,7 @@ func (po ProxyOpts) Args(ctx context.Context) ([]string, error) {
 		"--upstream=$(OAUTH2_PROXY_UPSTREAM)",
 		"--provider=oidc",
 		"--provider-display-name=Keycloak",
-		"--http-address=0.0.0.0:4180",
+		fmt.Sprintf("--http-address=0.0.0.0:%d", proxPort),
 	}
 
 	if po.EmailDomain != "" {

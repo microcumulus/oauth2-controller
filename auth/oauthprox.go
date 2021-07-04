@@ -62,6 +62,8 @@ func ReplaceWithOauth2Proxy(ctx context.Context, cs kubernetes.Interface, ing *n
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "ReplaceWithOauth2Proxy")
 	defer sp.Finish()
 
+	opts.Target.Ingress = ing
+
 	c, err := getGocloakSpecForIngress(ctx, ing)
 	if err != nil {
 		return fmt.Errorf("could't build client spec: %w", err)
@@ -91,7 +93,7 @@ func ReplaceWithOauth2Proxy(ctx context.Context, cs kubernetes.Interface, ing *n
 		},
 	}
 
-	env, err := opts.SetupEnv(ctx, cs, ing, oClient, c)
+	env, err := opts.SetupEnv(ctx, cs, oClient, c)
 	if err != nil {
 		return fmt.Errorf("error speccing out proxy env vars: %w", err)
 	}

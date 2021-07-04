@@ -17,6 +17,7 @@ limitations under the License.
 package v1beta1
 
 import (
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -28,14 +29,32 @@ type OAuth2ProxySpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// Foo is an example field of OAuth2Proxy. Edit OAuth2Proxy_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	ClusterClientProvider string             `json:"clusterClientProvider,omitEmpty"`
+	ClientProvider        v1.ObjectReference `json:"clientProvider,omitEmpty"`
+	ClientType            string             `json:"clientType"`
+
+	// IngressSelector instructs the controller to replace all ingresses that
+	// match a specified selector.
+	IngressSelector *metav1.LabelSelector `json:"ingressSelector"`
+
+	// Ingress instructs the controller to replace an ingress with a protected
+	// proxied version.
+	Ingress *v1.ObjectReference `json:"ingress,omitempty"`
+
+	// ServiceSelector instructs the controller to create proxies for all
+	// services that match a given selector
+	ServiceSelector *metav1.LabelSelector `json:"serviceSelector"`
+
+	// Service instructs the controller to target a specific single service.
+	Service *v1.ObjectReference `json:"service,omitempty"`
 }
 
 // OAuth2ProxyStatus defines the observed state of OAuth2Proxy
 type OAuth2ProxyStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+	Ready   bool   `json:"ready"`
+	Message string `json:"message,omitempty"`
 }
 
 // +kubebuilder:object:root=true

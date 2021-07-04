@@ -31,7 +31,7 @@ type OIDCClient struct {
 // An OIDCCreator can takes a context and client spec, and returns a clientid and
 // clientsecret or error.
 type OIDCCreator interface {
-	CreateOIDCClient(ctx context.Context, c gocloak.Client) (*OIDCClient, error)
+	CreateOIDCClient(ctx context.Context, c *gocloak.Client) (*OIDCClient, error)
 }
 
 // Returns a gocloak spec for a given kubernetes ingress spec
@@ -69,16 +69,47 @@ func ReplaceWithOauth2Proxy(ctx context.Context, cs kubernetes.Interface, ing *n
 		return fmt.Errorf("could't build client spec: %w", err)
 	}
 
-	oClient, err := oid.CreateOIDCClient(ctx, *c)
+	oClient, err := oid.CreateOIDCClient(ctx, c)
 	if err != nil {
 		return fmt.Errorf("error creating client: %w", err)
 	}
 
+	svc, err := createSvc(ctx, cs, oClient, c, opts)
+
+	updatedIng := ing.DeepCopy()
+
+	for i := range updatedIng.Spec.Rules {
+		for j := range updatedIng.Spec.Rules[i].HTTP.Paths {
+			updatedIng.Spec.Rules[i].HTTP.Paths[j].Backend = networkv1.IngressBackend{
+				Service: &networkv1.IngressServiceBackend{
+					Name: svc.Name,
+					Port: networkv1.ServiceBackendPort{
+						Number: httpPort,
+					},
+				},
+			}
+		}
+	}
+
+	_, err = cs.NetworkingV1().Ingresses(ing.Namespace).Update(ctx, updatedIng, metav1.UpdateOptions{})
+	if err != nil && !strings.Contains(err.Error(), "exists") {
+		return fmt.Errorf("error updating ingress: %w", err)
+	}
+	return nil
+}
+
+func createSvc(ctx context.Context, cs kubernetes.Interface, oClient *OIDCClient, c *gocloak.Client, opts ProxyOpts) (*corev1.Service, error) {
+	sp, ctx := opentracing.StartSpanFromContext(ctx, "createSvc")
+	defer sp.Finish()
+
+	ns, n := opts.targetSvcNamespaceAndName()
+	proxN := n + "-oauth2-proxy"
+
 	om := metav1.ObjectMeta{
-		Name:      *c.Name,
-		Namespace: ing.Namespace,
+		Name:      proxN,
+		Namespace: ns,
 		Labels: map[string]string{
-			"app": *c.Name,
+			"app": proxN,
 		},
 		Annotations: opts.Annotations,
 	}
@@ -93,30 +124,30 @@ func ReplaceWithOauth2Proxy(ctx context.Context, cs kubernetes.Interface, ing *n
 		},
 	}
 
-	env, err := opts.SetupEnv(ctx, cs, oClient, c)
+	env, err := opts.SetupEnv(ctx, cs, oClient)
 	if err != nil {
-		return fmt.Errorf("error speccing out proxy env vars: %w", err)
+		return nil, fmt.Errorf("error speccing out proxy env vars: %w", err)
 	}
 
 	args, err := opts.Args(ctx)
 	if err != nil {
-		return fmt.Errorf("error getting args from proxyopts: %w", err)
+		return nil, fmt.Errorf("error getting args from proxyopts: %w", err)
 	}
 
-	_, err = cs.AppsV1().Deployments(ing.Namespace).Create(ctx, &appsv1.Deployment{
+	_, err = cs.AppsV1().Deployments(ns).Create(ctx, &appsv1.Deployment{
 		ObjectMeta: om,
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &one32,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					"app": *c.Name,
+					"app": proxN,
 				},
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: om,
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{{
-						Name:  *c.Name,
+						Name:  n,
 						Image: "quay.io/oauth2-proxy/oauth2-proxy:latest",
 						Args:  args,
 						Env:   env,
@@ -132,46 +163,26 @@ func ReplaceWithOauth2Proxy(ctx context.Context, cs kubernetes.Interface, ing *n
 		},
 	}, metav1.CreateOptions{})
 	if err != nil && !strings.Contains(err.Error(), "exists") {
-		return fmt.Errorf("error creating deployment: %w", err)
+		return nil, fmt.Errorf("error creating deployment: %w", err)
 	}
 
-	_, err = cs.CoreV1().Services(ing.Namespace).Create(ctx, &corev1.Service{
+	svc, err := cs.CoreV1().Services(ns).Create(ctx, &corev1.Service{
 		ObjectMeta: om,
 		Spec: corev1.ServiceSpec{
 			Type:     corev1.ServiceTypeClusterIP,
 			Selector: om.Labels,
 			Ports: []corev1.ServicePort{{
 				Protocol:   corev1.ProtocolTCP,
-				Name:       *c.Name,
+				Name:       ns,
 				Port:       httpPort,
 				TargetPort: intstr.FromInt(proxPort),
 			}},
 		},
 	}, metav1.CreateOptions{})
 	if err != nil && !strings.Contains(err.Error(), "exists") {
-		return fmt.Errorf("error creating oidc service: %w", err)
+		return nil, fmt.Errorf("error creating oidc service: %w", err)
 	}
-
-	updatedIng := ing.DeepCopy()
-
-	for i := range updatedIng.Spec.Rules {
-		for j := range updatedIng.Spec.Rules[i].HTTP.Paths {
-			updatedIng.Spec.Rules[i].HTTP.Paths[j].Backend = networkv1.IngressBackend{
-				Service: &networkv1.IngressServiceBackend{
-					Name: om.Name,
-					Port: networkv1.ServiceBackendPort{
-						Number: httpPort,
-					},
-				},
-			}
-		}
-	}
-
-	_, err = cs.NetworkingV1().Ingresses(ing.Namespace).Update(ctx, updatedIng, metav1.UpdateOptions{})
-	if err != nil && !strings.Contains(err.Error(), "exists") {
-		return fmt.Errorf("error updating ingress: %w", err)
-	}
-	return nil
+	return svc, nil
 }
 
 var one32 = int32(1)

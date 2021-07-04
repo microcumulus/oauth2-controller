@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/Nerzal/gocloak/v8"
 	"github.com/opentracing/opentracing-go"
 	corev1 "k8s.io/api/core/v1"
 	networkv1 "k8s.io/api/networking/v1"
@@ -59,23 +58,36 @@ type Target struct {
 	Service *corev1.Service
 }
 
+func (po ProxyOpts) targetSvcNamespaceAndName() (string, string) {
+	switch {
+	case po.Target.Ingress != nil:
+		ns := po.Target.Ingress.Namespace
+		be := po.Target.Ingress.Spec.Rules[0].HTTP.Paths[0].Backend
+		return ns, be.Service.Name
+	case po.Target.Service != nil:
+		return po.Target.Service.Namespace, po.Target.Service.Name
+	}
+	return "", ""
+}
+
 // type CookieSessionStore struct {
 // }
 
 // SetupEnv does the work to set up secrets, and returns the kubernetes Env
 // spec for accessing the values it set up, with the varialbe names the
-// oauth2-proxy container expects them in.
-func (po ProxyOpts) SetupEnv(ctx context.Context, cs kubernetes.Interface, oClient *OIDCClient, c *gocloak.Client) ([]corev1.EnvVar, error) {
+// oauth2-proxy container expects them in. It takes a context, a kubernetes
+// client interface implementation, and oidcclient metadata.
+func (po ProxyOpts) SetupEnv(ctx context.Context, cs kubernetes.Interface, oClient *OIDCClient) ([]corev1.EnvVar, error) {
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "ProxyOpts.SetupEnv")
 	defer sp.Finish()
 
-	var up, ns, n string
+	ns, n := po.targetSvcNamespaceAndName()
+	oName := n + "-oauth2-proxy"
+
+	var up string
 	switch {
 	case po.Target.Ingress != nil:
-		ns = po.Target.Ingress.Namespace
 		be := po.Target.Ingress.Spec.Rules[0].HTTP.Paths[0].Backend
-		n = be.Service.Name
-
 		up = fmt.Sprintf("%s.%s", n, ns)
 		if be.Service.Port.Number != 80 {
 			up += fmt.Sprintf(":%d", be.Service.Port.Number)
@@ -119,7 +131,7 @@ func (po ProxyOpts) SetupEnv(ctx context.Context, cs kubernetes.Interface, oClie
 
 	_, err := cs.CoreV1().Secrets(ns).Create(ctx, &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      *c.Name,
+			Name:      oName,
 			Namespace: ns,
 		},
 		Data: secData,
@@ -135,7 +147,7 @@ func (po ProxyOpts) SetupEnv(ctx context.Context, cs kubernetes.Interface, oClie
 			ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: *c.Name,
+						Name: oName,
 					},
 					Key: k,
 				},

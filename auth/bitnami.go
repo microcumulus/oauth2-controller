@@ -17,7 +17,7 @@ type BitnamiHelmKCCreator struct {
 	Realm         string `json:"realm"`
 }
 
-func (bh *BitnamiHelmKCCreator) CreateOIDCClient(ctx context.Context, c gocloak.Client) (*OIDCClient, error) {
+func (bh *BitnamiHelmKCCreator) CreateOIDCClient(ctx context.Context, c *gocloak.Client) (*OIDCClient, error) {
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "BitnamiHelmKCCreator.CreateOIDCClient")
 	defer sp.Finish()
 
@@ -43,7 +43,7 @@ func (bh *BitnamiHelmKCCreator) CreateOIDCClient(ctx context.Context, c gocloak.
 		}
 	}
 
-	id, err := cli.CreateClient(ctx, jwt.AccessToken, bh.Realm, c)
+	id, err := cli.CreateClient(ctx, jwt.AccessToken, bh.Realm, *c)
 	if err != nil {
 		return nil, fmt.Errorf("couldn't create client: %w", err)
 	}

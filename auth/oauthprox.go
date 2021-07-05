@@ -12,7 +12,6 @@ import (
 	networkv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/client-go/kubernetes"
 )
 
 const (
@@ -24,6 +23,7 @@ const (
 // connect client that supports the discovery endpoints.
 type OIDCClient struct {
 	IssuerURL    string
+	Redirects    []string
 	ClientID     string
 	ClientSecret string
 }
@@ -57,8 +57,8 @@ func getGocloakSpecForIngress(ctx context.Context, ing *networkv1.Ingress) (*goc
 	}, nil
 }
 
-// ReplaceWithOauth2Proxy replaces an ingress with the oauth2 proxy
-func ReplaceWithOauth2Proxy(ctx context.Context, cs kubernetes.Interface, ing *networkv1.Ingress, oid OIDCCreator, opts ProxyOpts) error {
+// ReplaceWithOauth2Proxy replaces an ingress with the oauth2 proxy.
+func ReplaceWithOauth2Proxy(ctx context.Context, cs SecureStackCreator, ing *networkv1.Ingress, oid OIDCCreator, opts ProxyOpts) error {
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "ReplaceWithOauth2Proxy")
 	defer sp.Finish()
 
@@ -74,7 +74,7 @@ func ReplaceWithOauth2Proxy(ctx context.Context, cs kubernetes.Interface, ing *n
 		return fmt.Errorf("error creating client: %w", err)
 	}
 
-	svc, err := createSvc(ctx, cs, oClient, c, opts)
+	svc, err := createSvc(ctx, cs, oClient, opts)
 
 	updatedIng := ing.DeepCopy()
 
@@ -91,14 +91,14 @@ func ReplaceWithOauth2Proxy(ctx context.Context, cs kubernetes.Interface, ing *n
 		}
 	}
 
-	_, err = cs.NetworkingV1().Ingresses(ing.Namespace).Update(ctx, updatedIng, metav1.UpdateOptions{})
+	_, err = cs.CreateIngress(ctx, ing)
 	if err != nil && !strings.Contains(err.Error(), "exists") {
 		return fmt.Errorf("error updating ingress: %w", err)
 	}
 	return nil
 }
 
-func createSvc(ctx context.Context, cs kubernetes.Interface, oClient *OIDCClient, c *gocloak.Client, opts ProxyOpts) (*corev1.Service, error) {
+func createSvc(ctx context.Context, cs SecureStackCreator, oClient *OIDCClient, opts ProxyOpts) (*corev1.Service, error) {
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "createSvc")
 	defer sp.Finish()
 
@@ -134,7 +134,7 @@ func createSvc(ctx context.Context, cs kubernetes.Interface, oClient *OIDCClient
 		return nil, fmt.Errorf("error getting args from proxyopts: %w", err)
 	}
 
-	_, err = cs.AppsV1().Deployments(ns).Create(ctx, &appsv1.Deployment{
+	_, err = cs.CreateDeployment(ctx, &appsv1.Deployment{
 		ObjectMeta: om,
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &one32,
@@ -161,12 +161,12 @@ func createSvc(ctx context.Context, cs kubernetes.Interface, oClient *OIDCClient
 				},
 			},
 		},
-	}, metav1.CreateOptions{})
+	})
 	if err != nil && !strings.Contains(err.Error(), "exists") {
 		return nil, fmt.Errorf("error creating deployment: %w", err)
 	}
 
-	svc, err := cs.CoreV1().Services(ns).Create(ctx, &corev1.Service{
+	svc, err := cs.CreateService(ctx, &corev1.Service{
 		ObjectMeta: om,
 		Spec: corev1.ServiceSpec{
 			Type:     corev1.ServiceTypeClusterIP,
@@ -178,7 +178,7 @@ func createSvc(ctx context.Context, cs kubernetes.Interface, oClient *OIDCClient
 				TargetPort: intstr.FromInt(proxPort),
 			}},
 		},
-	}, metav1.CreateOptions{})
+	})
 	if err != nil && !strings.Contains(err.Error(), "exists") {
 		return nil, fmt.Errorf("error creating oidc service: %w", err)
 	}

@@ -6,11 +6,10 @@ import (
 
 	"github.com/Nerzal/gocloak/v8"
 	"github.com/opentracing/opentracing-go"
-	"k8s.io/client-go/kubernetes"
 )
 
 type BitnamiHelmKCCreator struct {
-	Kube          kubernetes.Interface
+	Kube          SecureStackCreator
 	Namespace     string `json:"namespace"`
 	Name          string `json:"name"`
 	IngressPrefix string `json:"ingressPrefix"`

@@ -11,13 +11,12 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	networkv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
 )
 
 // ProxyOpts are used to set up both the kubernetes objects (secrets) and the
 // env/args for the oauth2-proxy
 type ProxyOpts struct {
-	Session      ProxySessionStore `json:"session"`
+	SessionStore ProxySessionStore `json:"sessionStore"`
 	CustomBanner string            `json:"customBanner,omitempty"`
 	EmailDomain  string            `json:"emailDomain,omitempty"`
 	Annotations  map[string]string `json:"annotations,omitempty"`
@@ -55,7 +54,13 @@ type PlainRedis struct {
 
 type Target struct {
 	Ingress *networkv1.Ingress
-	Service *corev1.Service
+	SvIng   *Service
+}
+
+type Service struct {
+	Service *corev1.Service `json:"service"`
+	// Optional ingress to use to expose the service
+	IngressDNS string `json:"ingressDNS,omitempty"`
 }
 
 func (po ProxyOpts) targetSvcNamespaceAndName() (string, string) {
@@ -64,8 +69,8 @@ func (po ProxyOpts) targetSvcNamespaceAndName() (string, string) {
 		ns := po.Target.Ingress.Namespace
 		be := po.Target.Ingress.Spec.Rules[0].HTTP.Paths[0].Backend
 		return ns, be.Service.Name
-	case po.Target.Service != nil:
-		return po.Target.Service.Namespace, po.Target.Service.Name
+	case po.Target.SvIng.Service != nil:
+		return po.Target.SvIng.Service.Namespace, po.Target.SvIng.Service.Name
 	}
 	return "", ""
 }
@@ -77,7 +82,7 @@ func (po ProxyOpts) targetSvcNamespaceAndName() (string, string) {
 // spec for accessing the values it set up, with the varialbe names the
 // oauth2-proxy container expects them in. It takes a context, a kubernetes
 // client interface implementation, and oidcclient metadata.
-func (po ProxyOpts) SetupEnv(ctx context.Context, cs kubernetes.Interface, oClient *OIDCClient) ([]corev1.EnvVar, error) {
+func (po ProxyOpts) SetupEnv(ctx context.Context, cs SecureStackCreator, oClient *OIDCClient) ([]corev1.EnvVar, error) {
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "ProxyOpts.SetupEnv")
 	defer sp.Finish()
 
@@ -87,14 +92,14 @@ func (po ProxyOpts) SetupEnv(ctx context.Context, cs kubernetes.Interface, oClie
 	var up string
 	switch {
 	case po.Target.Ingress != nil:
-		be := po.Target.Ingress.Spec.Rules[0].HTTP.Paths[0].Backend
 		up = fmt.Sprintf("%s.%s", n, ns)
+
+		be := po.Target.Ingress.Spec.Rules[0].HTTP.Paths[0].Backend
 		if be.Service.Port.Number != 80 {
 			up += fmt.Sprintf(":%d", be.Service.Port.Number)
 		}
-	case po.Target.Service != nil:
-		ns, n = po.Target.Service.Namespace, po.Target.Service.Name
-		up = fmt.Sprintf("%s.%s:%s", n, ns, &po.Target.Service.Spec.Ports[0].TargetPort)
+	case po.Target.SvIng != nil:
+		up = fmt.Sprintf("%s.%s:%s", n, ns, &po.Target.SvIng.Service.Spec.Ports[0].TargetPort)
 	}
 
 	bs := make([]byte, 16)
@@ -108,18 +113,18 @@ func (po ProxyOpts) SetupEnv(ctx context.Context, cs kubernetes.Interface, oClie
 		"COOKIE_SECRET":   base64.StdEncoding.EncodeToString(bs),
 	}
 
-	if po.Session.Redis != nil {
+	if po.SessionStore.Redis != nil {
 		var redis PlainRedis
 		switch {
-		case po.Session.Redis.Plain != nil:
-			redis = *po.Session.Redis.Plain
-		case po.Session.Redis.Helm != nil:
-			redisSec, err := cs.CoreV1().Secrets(po.Session.Redis.Helm.Namespace).Get(ctx, po.Session.Redis.Helm.Name+"-redis", metav1.GetOptions{})
+		case po.SessionStore.Redis.Plain != nil:
+			redis = *po.SessionStore.Redis.Plain
+		case po.SessionStore.Redis.Helm != nil:
+			redisSec, err := cs.GetSecret(ctx, po.SessionStore.Redis.Helm.Namespace, po.SessionStore.Redis.Helm.Name+"-redis")
 			if err != nil {
 				return nil, fmt.Errorf("couldn't get redis secret: %w", err)
 			}
 			redis.Password = string(redisSec.Data["redis-password"])
-			redis.URL = fmt.Sprintf("redis://%s-redis-master.%s", po.Session.Redis.Helm.Name, po.Session.Redis.Helm.Namespace)
+			redis.URL = fmt.Sprintf("redis://%s-redis-master.%s", po.SessionStore.Redis.Helm.Name, po.SessionStore.Redis.Helm.Namespace)
 		}
 		vals["REDIS_PASSWORD"] = redis.Password
 	}
@@ -129,13 +134,13 @@ func (po ProxyOpts) SetupEnv(ctx context.Context, cs kubernetes.Interface, oClie
 		secData[k] = []byte(v)
 	}
 
-	_, err := cs.CoreV1().Secrets(ns).Create(ctx, &corev1.Secret{
+	_, err := cs.CreateSecret(ctx, &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      oName,
 			Namespace: ns,
 		},
 		Data: secData,
-	}, metav1.CreateOptions{})
+	})
 	if err != nil && !strings.Contains(err.Error(), "exists") {
 		return nil, fmt.Errorf("error creating secret: %w", err)
 	}
@@ -173,13 +178,13 @@ func (po ProxyOpts) Args(ctx context.Context) ([]string, error) {
 	}
 
 	switch {
-	case po.Session.Redis != nil:
+	case po.SessionStore.Redis != nil:
 		var url string
 		switch {
-		case po.Session.Redis.Plain != nil:
-			url = po.Session.Redis.Plain.URL
-		case po.Session.Redis.Helm != nil:
-			url = fmt.Sprintf("redis://%s-redis-master.%s", po.Session.Redis.Helm.Name, po.Session.Redis.Helm.Namespace)
+		case po.SessionStore.Redis.Plain != nil:
+			url = po.SessionStore.Redis.Plain.URL
+		case po.SessionStore.Redis.Helm != nil:
+			url = fmt.Sprintf("redis://%s-redis-master.%s", po.SessionStore.Redis.Helm.Name, po.SessionStore.Redis.Helm.Namespace)
 		}
 		args = append(
 			args,

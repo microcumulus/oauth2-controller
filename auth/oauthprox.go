@@ -22,8 +22,8 @@ const (
 // OIDCClient represents the critical data to be able to connect with an openid
 // connect client that supports the discovery endpoints.
 type OIDCClient struct {
-	IssuerURL    string
-	Redirects    []string
+	IssuerURL string
+	// Redirects    []string
 	ClientID     string
 	ClientSecret string
 }

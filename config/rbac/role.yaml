@@ -1,0 +1,88 @@
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  name: manager-role
+rules:
+- apiGroups:
+  - microcumul.us.my.domain
+  resources:
+  - clusteroauth2clientproviders
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - microcumul.us.my.domain
+  resources:
+  - clusteroauth2clientproviders/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - microcumul.us.my.domain
+  resources:
+  - oauth2clientproviders
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - microcumul.us.my.domain
+  resources:
+  - oauth2clientproviders/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - microcumul.us.my.domain
+  resources:
+  - oauth2clients
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - microcumul.us.my.domain
+  resources:
+  - oauth2clients/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - microcumul.us.my.domain
+  resources:
+  - oauth2proxies
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - microcumul.us.my.domain
+  resources:
+  - oauth2proxies/status
+  verbs:
+  - get
+  - patch
+  - update

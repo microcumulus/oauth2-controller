@@ -90,7 +90,8 @@ func (k *KubeClientCreator) ListIngresses(ctx context.Context, ns string) (*netw
 	return k.Kube.NetworkingV1().Ingresses(ns).List(ctx, metav1.ListOptions{})
 }
 
-// A RuntimeCreator implements SecureStackCreator with the kubernetes.Interface
+// A RuntimeCreator implements SecureStackCreator with the kubernetes
+// sig-runtime client.Client interface
 type RuntimeCreator struct {
 	Client client.Client
 }

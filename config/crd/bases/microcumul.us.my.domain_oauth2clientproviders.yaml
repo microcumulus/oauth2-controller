@@ -1,0 +1,137 @@
+
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: (devel)
+  creationTimestamp: null
+  name: oauth2clientproviders.microcumul.us.my.domain
+spec:
+  group: microcumul.us.my.domain
+  names:
+    kind: OAuth2ClientProvider
+    listKind: OAuth2ClientProviderList
+    plural: oauth2clientproviders
+    singular: oauth2clientprovider
+  scope: Namespaced
+  versions:
+  - name: v1beta1
+    schema:
+      openAPIV3Schema:
+        description: OAuth2ClientProvider is the Schema for the oauth2clientproviders
+          API
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: OAuth2ClientProviderSpec defines the desired state of OAuth2ClientProvider
+            properties:
+              keycloak:
+                description: Keycloak providers can provision oauth2 clients from
+                  openid connect
+                properties:
+                  baseURL:
+                    description: BaseURL is the externally-accessible base URL for
+                      the keycloak server
+                    type: string
+                  clientAuth:
+                    description: ClientAuth allows the provider code to authenticate
+                      with a keycloak client credential grant
+                    properties:
+                      clientID:
+                        type: string
+                      clientSecret:
+                        description: SecretKeySelector selects a key of a Secret.
+                        properties:
+                          key:
+                            description: The key of the secret to select from.  Must
+                              be a valid secret key.
+                            type: string
+                          name:
+                            description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                              TODO: Add other useful fields. apiVersion, kind, uid?'
+                            type: string
+                          optional:
+                            description: Specify whether the Secret or its key must
+                              be defined
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                    required:
+                    - clientID
+                    - clientSecret
+                    type: object
+                  realm:
+                    description: Realm is the keycloak Realm for which we have credentials
+                      and will provision clients.
+                    type: string
+                  userAuth:
+                    description: UserAuth allows the provider code to authenticate
+                      with a keycloak user/password
+                    properties:
+                      password:
+                        description: SecretKeySelector selects a key of a Secret.
+                        properties:
+                          key:
+                            description: The key of the secret to select from.  Must
+                              be a valid secret key.
+                            type: string
+                          name:
+                            description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                              TODO: Add other useful fields. apiVersion, kind, uid?'
+                            type: string
+                          optional:
+                            description: Specify whether the Secret or its key must
+                              be defined
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                      username:
+                        type: string
+                    required:
+                    - password
+                    - username
+                    type: object
+                required:
+                - baseURL
+                - realm
+                type: object
+            required:
+            - keycloak
+            type: object
+          status:
+            description: OAuth2ClientProviderStatus defines the observed state of
+              OAuth2ClientProvider
+            properties:
+              ready:
+                type: boolean
+              state:
+                description: 'INSERT ADDITIONAL STATUS FIELD - define observed state
+                  of cluster Important: Run "make" to regenerate code after modifying
+                  this file'
+                type: string
+            required:
+            - ready
+            type: object
+        type: object
+    served: true
+    storage: true
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []

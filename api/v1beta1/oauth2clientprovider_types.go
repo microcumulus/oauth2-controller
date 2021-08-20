@@ -40,10 +40,10 @@ type KeycloakProvider struct {
 	// Realm is the keycloak Realm for which we have credentials and will provision clients.
 	Realm string `json:"realm"`
 	// UserAuth allows the provider code to authenticate with a keycloak user/password
-	UserAuth *UserAuth
+	UserAuth *UserAuth `json:"userAuth,omitempty"`
 	// ClientAuth allows the provider code to authenticate with a keycloak client
 	// credential grant
-	ClientAuth *ClientAuth
+	ClientAuth *ClientAuth `json:"clientAuth,omitempty"`
 }
 
 // UserAuth allows the provider to authenticate with a known keycloak user/pass

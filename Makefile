@@ -19,7 +19,7 @@ test: generate fmt vet manifests
 
 # Build manager binary
 manager: generate fmt vet
-	GOOS=linux CGO_ENABLED=0 GOARCH=linux GO111MODULE=on go build -a -o bin/manager main.go
+	GOOS=linux CGO_ENABLED=0 GOARCH=amd64 GO111MODULE=on go build -a -o bin/manager main.go
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
 run: generate fmt vet manifests

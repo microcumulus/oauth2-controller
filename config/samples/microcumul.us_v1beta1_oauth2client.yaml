@@ -1,4 +1,4 @@
-apiVersion: microcumul.us.my.domain/v1beta1
+apiVersion: microcumul.us/v1beta1
 kind: OAuth2Client
 metadata:
   name: oauth2client-sample

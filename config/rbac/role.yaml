@@ -7,7 +7,7 @@ metadata:
   name: manager-role
 rules:
 - apiGroups:
-  - microcumul.us.my.domain
+  - microcumul.us
   resources:
   - clusteroauth2clientproviders
   verbs:
@@ -19,7 +19,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - microcumul.us.my.domain
+  - microcumul.us
   resources:
   - clusteroauth2clientproviders/status
   verbs:
@@ -27,7 +27,7 @@ rules:
   - patch
   - update
 - apiGroups:
-  - microcumul.us.my.domain
+  - microcumul.us
   resources:
   - oauth2clientproviders
   verbs:
@@ -39,7 +39,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - microcumul.us.my.domain
+  - microcumul.us
   resources:
   - oauth2clientproviders/status
   verbs:
@@ -47,7 +47,7 @@ rules:
   - patch
   - update
 - apiGroups:
-  - microcumul.us.my.domain
+  - microcumul.us
   resources:
   - oauth2clients
   verbs:
@@ -59,7 +59,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - microcumul.us.my.domain
+  - microcumul.us
   resources:
   - oauth2clients/status
   verbs:
@@ -67,7 +67,7 @@ rules:
   - patch
   - update
 - apiGroups:
-  - microcumul.us.my.domain
+  - microcumul.us
   resources:
   - oauth2proxies
   verbs:
@@ -79,7 +79,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - microcumul.us.my.domain
+  - microcumul.us
   resources:
   - oauth2proxies/status
   verbs:

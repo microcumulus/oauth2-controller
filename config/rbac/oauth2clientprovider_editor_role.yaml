@@ -5,7 +5,7 @@ metadata:
   name: oauth2clientprovider-editor-role
 rules:
 - apiGroups:
-  - microcumul.us.my.domain
+  - microcumul.us
   resources:
   - oauth2clientproviders
   verbs:
@@ -17,7 +17,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - microcumul.us.my.domain
+  - microcumul.us
   resources:
   - oauth2clientproviders/status
   verbs:

@@ -2,7 +2,7 @@
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
 FROM gcr.io/distroless/static:nonroot
 WORKDIR /
-COPY manager .
+COPY manager /
 USER nonroot:nonroot
 
 ENTRYPOINT ["/manager"]

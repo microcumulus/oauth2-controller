@@ -5,7 +5,7 @@ metadata:
   name: clusteroauth2clientprovider-viewer-role
 rules:
 - apiGroups:
-  - microcumul.us.my.domain
+  - microcumul.us
   resources:
   - clusteroauth2clientproviders
   verbs:
@@ -13,7 +13,7 @@ rules:
   - list
   - watch
 - apiGroups:
-  - microcumul.us.my.domain
+  - microcumul.us
   resources:
   - clusteroauth2clientproviders/status
   verbs:

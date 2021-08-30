@@ -1,6 +1,6 @@
 
 # Image URL to use all building/pushing image targets
-IMG ?= docker.astuart.co/oauth2-controller:latest
+IMG ?= oauth2-controller:latest
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
 CRD_OPTIONS ?= "crd:trivialVersions=true"
 
@@ -18,8 +18,8 @@ test: generate fmt vet manifests
 	go test ./... -coverprofile cover.out
 
 # Build manager binary
-manager: generate fmt vet
-	GOOS=linux CGO_ENABLED=0 GOARCH=amd64 GO111MODULE=on go build -a -o bin/manager main.go
+manager: generate fmt vet $(wildcard **/*.go)
+	GOOS=linux CGO_ENABLED=0 GOARCH=amd64 GO111MODULE=on go build -a -o manager main.go
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
 run: generate fmt vet manifests
@@ -37,6 +37,7 @@ uninstall: manifests
 deploy: manifests
 	cd config/manager && kustomize edit set image controller=${IMG}
 	kustomize build config/default | kubectl apply -f -
+	kind load docker-image ${IMG}
 
 # Generate manifests e.g. CRD, RBAC etc.
 manifests: controller-gen

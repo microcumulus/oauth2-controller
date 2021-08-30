@@ -34,8 +34,8 @@ type ClusterOAuth2ClientProviderReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=microcumul.us.my.domain,resources=clusteroauth2clientproviders,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=microcumul.us.my.domain,resources=clusteroauth2clientproviders/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=microcumul.us,resources=clusteroauth2clientproviders,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=microcumul.us,resources=clusteroauth2clientproviders/status,verbs=get;update;patch
 
 func (r *ClusterOAuth2ClientProviderReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	_ = context.Background()

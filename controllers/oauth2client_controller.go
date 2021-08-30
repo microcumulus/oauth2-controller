@@ -41,8 +41,8 @@ type OAuth2ClientReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=microcumul.us.my.domain,resources=oauth2clients,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=microcumul.us.my.domain,resources=oauth2clients/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=microcumul.us,resources=oauth2clients,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=microcumul.us,resources=oauth2clients/status,verbs=get;update;patch
 
 func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res ctrl.Result, err error) {
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "OAuth2ClientReconciler.Reconcile")
@@ -67,7 +67,7 @@ func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	var prov v1beta1.ClusterOAuth2ClientProvider
 	err = r.Get(ctx, client.ObjectKey{
 		Name:      c.Spec.Provider.Name,
-		Namespace: "",
+		Namespace: c.Spec.Provider.Namespace,
 	}, &prov)
 	if err != nil {
 		return res, fmt.Errorf("error getting given clusterprovider %s: %w", c.Spec.Provider.Name, err)

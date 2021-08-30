@@ -18,12 +18,15 @@ rules:
   - delete
 - apiGroups:
   - ""
+  - coordination.k8s.io 
   resources:
   - configmaps/status
+  - leases
   verbs:
   - get
   - update
   - patch
+  - create
 - apiGroups:
   - ""
   resources:

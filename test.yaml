@@ -1,0 +1,27 @@
+apiVersion: microcumul.us/v1beta1
+kind: OAuth2ClientProvider
+metadata:
+  name: keycloak
+spec:
+  keycloak:
+    baseURL: http://keycloak-1630347783-headless
+    realm: master
+    userAuth:
+      username: user
+      password:
+        name: keycloak-1630347783
+        key: admin-password
+---
+apiVersion: microcumul.us/v1beta1
+kind: OAuth2Client
+metadata:
+  name: test-1
+  namespace: oauth2-proxy-controller-system
+spec:
+  provider:
+    namespace: oauth2-proxy-controller-system
+    name: keycloak
+  clientName: test
+  secretName: testclient
+  redirects:
+    - 'http://localhost:8080'

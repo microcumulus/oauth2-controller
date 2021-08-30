@@ -34,8 +34,8 @@ type OAuth2ProxyReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=microcumul.us.my.domain,resources=oauth2proxies,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=microcumul.us.my.domain,resources=oauth2proxies/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=microcumul.us,resources=oauth2proxies,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=microcumul.us,resources=oauth2proxies/status,verbs=get;update;patch
 
 func (r *OAuth2ProxyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	_ = context.Background()

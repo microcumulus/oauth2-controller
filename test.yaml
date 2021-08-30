@@ -1,5 +1,5 @@
 apiVersion: microcumul.us/v1beta1
-kind: OAuth2ClientProvider
+kind: ClusterOAuth2ClientProvider
 metadata:
   name: keycloak
 spec:

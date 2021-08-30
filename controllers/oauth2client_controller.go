@@ -67,7 +67,7 @@ func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	var prov v1beta1.ClusterOAuth2ClientProvider
 	err = r.Get(ctx, client.ObjectKey{
 		Name:      c.Spec.Provider.Name,
-		Namespace: c.Spec.Provider.Namespace,
+		Namespace: "",
 	}, &prov)
 	if err != nil {
 		return res, fmt.Errorf("error getting given clusterprovider %s: %w", c.Spec.Provider.Name, err)

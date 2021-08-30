@@ -49,8 +49,13 @@ type KeycloakProvider struct {
 // UserAuth allows the provider to authenticate with a known keycloak user/pass
 // combination. Must have admin permissions.
 type UserAuth struct {
-	Username string                    `json:"username"`
-	Password *corev1.SecretKeySelector `json:"password"`
+	Username    string       `json:"username"`
+	PasswordRef *PasswordRef `json:"passwordRef"`
+}
+
+type PasswordRef struct {
+	*corev1.SecretKeySelector `json:",inline"`
+	Namespace                 string `json:"namespace"`
 }
 
 // ClientAuth allows the use of a keycloak client that has a ServiceAccount

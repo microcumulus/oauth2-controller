@@ -1,6 +1,6 @@
 
 # Image URL to use all building/pushing image targets
-IMG ?= andrewstuart/oauth2-controller:latest
+IMG ?= andrewstuart/oauth2controller:latest
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
 CRD_OPTIONS ?= "crd:trivialVersions=true"
 

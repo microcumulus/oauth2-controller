@@ -18,6 +18,7 @@ package main
 
 import (
 	"flag"
+	"log"
 	"os"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -44,6 +45,7 @@ func init() {
 }
 
 func main() {
+	log.Println("start")
 	var metricsAddr string
 	var enableLeaderElection bool
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")

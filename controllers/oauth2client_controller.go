@@ -81,7 +81,7 @@ func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	case prov.Spec.Keycloak.UserAuth != nil:
 		ua := prov.Spec.Keycloak.UserAuth
 
-		pass, err := r.getSecretVal(ctx, c.Namespace, ua.Password)
+		pass, err := r.getSecretVal(ctx, ua.PasswordRef.Namespace, ua.PasswordRef.SecretKeySelector)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("error logging in: %w", err)
 		}

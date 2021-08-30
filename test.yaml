@@ -9,8 +9,9 @@ spec:
     userAuth:
       username: user
       password:
-        name: keycloak-1630347783
+        name: microcumulus-keycloak
         key: admin-password
+        namespace: keycloak
 ---
 apiVersion: microcumul.us/v1beta1
 kind: OAuth2Client

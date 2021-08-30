@@ -4,7 +4,7 @@ metadata:
   name: keycloak
 spec:
   keycloak:
-    baseURL: http://keycloak-1630347783-headless
+    baseURL: http://keycloak-1630347783
     realm: master
     userAuth:
       username: user

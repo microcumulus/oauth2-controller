@@ -1,6 +1,6 @@
 
 # Image URL to use all building/pushing image targets
-IMG ?= oauth2-controller:latest
+IMG ?= andrewstuart/oauth2-controller:latest
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
 CRD_OPTIONS ?= "crd:trivialVersions=true"
 
@@ -19,7 +19,7 @@ test: generate fmt vet manifests
 
 # Build manager binary
 manager: generate fmt vet $(wildcard **/*.go)
-	GOOS=linux CGO_ENABLED=0 GOARCH=amd64 GO111MODULE=on go build -a -o manager main.go
+	GOOS=linux CGO_ENABLED=0 GOARCH=amd64 GO111MODULE=on go build -o manager main.go
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
 run: generate fmt vet manifests

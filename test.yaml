@@ -4,25 +4,41 @@ metadata:
   name: keycloak
 spec:
   keycloak:
-    baseURL: http://keycloak-1630347783
+    baseURL: http://keycloak.default
     realm: master
     userAuth:
       username: user
-      password:
-        name: microcumulus-keycloak
+      passwordRef:
+        name: keycloak
         key: admin-password
-        namespace: keycloak
+        namespace: default
 ---
 apiVersion: microcumul.us/v1beta1
-kind: OAuth2Client
+kind: OAuth2Proxy
 metadata:
   name: test-1
   namespace: oauth2-proxy-controller-system
 spec:
-  provider:
-    namespace: oauth2-proxy-controller-system
-    name: keycloak
-  clientName: test
-  secretName: testclient
-  redirects:
-    - 'http://localhost:8080'
+  clusterClientProvider: keycloak
+  redisHost: redis-master
+  redisPasswordRef:
+    namespace: default
+    name: redis
+    key: redis-password
+  ingress:
+    namespace: default
+    name: example-ingress
+---
+# apiVersion: microcumul.us/v1beta1
+# kind: OAuth2Client
+# metadata:
+#   name: test-1
+#   namespace: oauth2-proxy-controller-system
+# spec:
+#   provider:
+#     namespace: oauth2-proxy-controller-system
+#     name: keycloak
+#   clientName: test
+#   secretName: testclient
+#   redirects:
+#     - 'http://localhost:8080'

@@ -67,11 +67,10 @@ func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 	var prov v1beta1.ClusterOAuth2ClientProvider
 	err = r.Get(ctx, client.ObjectKey{
-		Name:      c.Spec.Provider.Name,
-		Namespace: "",
+		Name: c.Spec.ClusterProvider,
 	}, &prov)
 	if err != nil {
-		return res, fmt.Errorf("error getting given clusterprovider %s: %w", c.Spec.Provider.Name, err)
+		return res, fmt.Errorf("error getting given clusterprovider %s: %w", c.Spec.ClusterProvider, err)
 	}
 
 	// TODO: abstract this into a provider interface
@@ -81,7 +80,7 @@ func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	case prov.Spec.Keycloak.UserAuth != nil:
 		ua := prov.Spec.Keycloak.UserAuth
 
-		pass, err := r.getSecretVal(ctx, ua.PasswordRef.Namespace, ua.PasswordRef.SecretKeySelector)
+		pass, err := getSecretVal(ctx, r.Client, ua.PasswordRef.Namespace, ua.PasswordRef.SecretKeySelector)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("error logging in: %w", err)
 		}
@@ -92,7 +91,7 @@ func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		}
 	case prov.Spec.Keycloak.ClientAuth != nil:
 		ca := prov.Spec.Keycloak.ClientAuth
-		sec, err := r.getSecretVal(ctx, c.Namespace, ca.ClientSecret)
+		sec, err := getSecretVal(ctx, r.Client, c.Namespace, ca.ClientSecret)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("error logging in: %w", err)
 		}
@@ -139,19 +138,22 @@ func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request
 				Name:      c.Spec.SecretName,
 			},
 			StringData: map[string]string{
-				"id":     id,
-				"secret": *cred.Value,
+				"id":        id,
+				"secret":    *cred.Value,
+				"issuerURL": fmt.Sprintf("%s/%s", strings.TrimSuffix(prov.Spec.Keycloak.BaseURL, "/"), strings.TrimPrefix(prov.Spec.Keycloak.Realm, "/")),
 			},
 		}
 		err = r.Create(ctx, &sec)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("error creating requested secret %s/%s: %w", req.Namespace, c.Spec.SecretName, err)
 		}
+		return ctrl.Result{}, nil
 	}
 	sec.Data = nil
 	sec.StringData = map[string]string{
-		"id":     id,
-		"secret": *cred.Value,
+		"id":        id,
+		"secret":    *cred.Value,
+		"issuerURL": fmt.Sprintf("%s/%s", strings.TrimSuffix(prov.Spec.Keycloak.BaseURL, "/"), strings.TrimPrefix(prov.Spec.Keycloak.Realm, "/")),
 	}
 
 	err = r.Update(ctx, &sec)
@@ -162,7 +164,7 @@ func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	return ctrl.Result{}, nil
 }
 
-func (r *OAuth2ClientReconciler) getSecretVal(ctx context.Context, ns string, sel *corev1.SecretKeySelector) (string, error) {
+func getSecretVal(ctx context.Context, r client.Client, ns string, sel *corev1.SecretKeySelector) (string, error) {
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "OAuth2ClientReconciler.getSecretVal", opentracing.Tags{"name": sel.Name, "namespace": ns})
 	defer sp.Finish()
 	var sec corev1.Secret

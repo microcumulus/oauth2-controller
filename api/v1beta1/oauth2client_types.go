@@ -17,7 +17,6 @@ limitations under the License.
 package v1beta1
 
 import (
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -25,7 +24,8 @@ import (
 type OAuth2ClientSpec struct {
 	// Provider references the Oauth2ClientProvider or
 	// ClusterOauth2ClientProvider that should provision this client.
-	Provider corev1.ObjectReference `json:"provider"`
+	Provider        string `json:"provider,omitempty"`
+	ClusterProvider string `json:"clusterProvider,omitempty"`
 
 	// ClientID is the optional clientid that the client should have.
 	ClientID string `json:"clientID,omitempty"`

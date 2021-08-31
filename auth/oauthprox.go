@@ -62,8 +62,6 @@ func ReplaceWithOauth2Proxy(ctx context.Context, cs SecureStackCreator, ing *net
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "ReplaceWithOauth2Proxy")
 	defer sp.Finish()
 
-	opts.Target.Ingress = ing
-
 	c, err := getGocloakSpecForIngress(ctx, ing)
 	if err != nil {
 		return fmt.Errorf("could't build client spec: %w", err)
@@ -74,7 +72,7 @@ func ReplaceWithOauth2Proxy(ctx context.Context, cs SecureStackCreator, ing *net
 		return fmt.Errorf("error creating client: %w", err)
 	}
 
-	svc, err := createSvc(ctx, cs, oClient, opts)
+	svc, err := CreateSvc(ctx, cs, oClient, opts)
 
 	updatedIng := ing.DeepCopy()
 
@@ -98,7 +96,7 @@ func ReplaceWithOauth2Proxy(ctx context.Context, cs SecureStackCreator, ing *net
 	return nil
 }
 
-func createSvc(ctx context.Context, cs SecureStackCreator, oClient *OIDCClient, opts ProxyOpts) (*corev1.Service, error) {
+func CreateSvc(ctx context.Context, cs SecureStackCreator, oClient *OIDCClient, opts ProxyOpts) (*corev1.Service, error) {
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "createSvc")
 	defer sp.Finish()
 

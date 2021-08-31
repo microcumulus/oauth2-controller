@@ -53,8 +53,8 @@ type PlainRedis struct {
 }
 
 type Target struct {
-	Ingress *networkv1.Ingress
-	SvIng   *Service
+	Ingress *networkv1.Ingress `json:"ingress"`
+	SvIng   *Service           `json:"svIng"`
 }
 
 type Service struct {

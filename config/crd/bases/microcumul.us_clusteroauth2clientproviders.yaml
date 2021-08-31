@@ -82,8 +82,7 @@ spec:
                     description: UserAuth allows the provider code to authenticate
                       with a keycloak user/password
                     properties:
-                      password:
-                        description: SecretKeySelector selects a key of a Secret.
+                      passwordRef:
                         properties:
                           key:
                             description: The key of the secret to select from.  Must
@@ -93,17 +92,20 @@ spec:
                             description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
                               TODO: Add other useful fields. apiVersion, kind, uid?'
                             type: string
+                          namespace:
+                            type: string
                           optional:
                             description: Specify whether the Secret or its key must
                               be defined
                             type: boolean
                         required:
                         - key
+                        - namespace
                         type: object
                       username:
                         type: string
                     required:
-                    - password
+                    - passwordRef
                     - username
                     type: object
                 required:

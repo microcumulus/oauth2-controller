@@ -29,21 +29,25 @@ type OAuth2ProxySpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	ClusterClientProvider string             `json:"clusterClientProvider,omitEmpty"`
-	ClientProvider        v1.ObjectReference `json:"clientProvider,omitEmpty"`
-	ClientType            string             `json:"clientType"`
+	ClusterClientProvider string `json:"clusterClientProvider,omitempty"`
+	ClientProvider        string `json:"clientProvider,omitempty"`
+	ClientType            string `json:"clientType,omitempty"`
+
+	// RedisPasswordRef refers to the password to a redis instance, to be used for session storage
+	RedisPasswordRef *PasswordRef `json:"redisPasswordRef"`
+	RedisHost        string       `json:"redisHost"`
 
 	// IngressSelector instructs the controller to replace all ingresses that
 	// match a specified selector.
-	IngressSelector *metav1.LabelSelector `json:"ingressSelector"`
+	IngressSelector *metav1.LabelSelector `json:"ingressSelector,omitempty"`
 
 	// Ingress instructs the controller to replace an ingress with a protected
 	// proxied version.
-	Ingress *v1.ObjectReference `json:"ingress,omitempty"`
+	Ingress *v1.ObjectReference `json:"ingress"`
 
 	// ServiceSelector instructs the controller to create proxies for all
 	// services that match a given selector
-	ServiceSelector *metav1.LabelSelector `json:"serviceSelector"`
+	ServiceSelector *metav1.LabelSelector `json:"serviceSelector,omitempty"`
 
 	// Service instructs the controller to target a specific single service.
 	Service *v1.ObjectReference `json:"service,omitempty"`

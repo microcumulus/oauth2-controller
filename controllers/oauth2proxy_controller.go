@@ -20,6 +20,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -37,6 +38,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	microcumulusv1beta1 "github.com/microcumulus/oauth2-controller/api/v1beta1"
+)
+
+const (
+	annotPreviousRules  = "microcumul.us/previous-rules"
+	finalizerStringProx = "microcumul.us/proxy-controller"
 )
 
 // OAuth2ProxyReconciler reconciles a OAuth2Proxy object
@@ -62,6 +68,9 @@ func (r *OAuth2ProxyReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	var spec microcumulusv1beta1.OAuth2Proxy
 	err := r.Get(ctx, req.NamespacedName, &spec)
 	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			return ctrl.Result{}, nil
+		}
 		return ctrl.Result{}, err
 	}
 
@@ -71,6 +80,19 @@ func (r *OAuth2ProxyReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("error fetching ingress matching reference %s: %w", spec.Spec.Ingress.String(), err)
 	}
+
+	// If the object has been deleted
+	if !spec.ObjectMeta.DeletionTimestamp.IsZero() {
+		return r.handleDelete(ctx, spec, ing)
+	}
+
+	if !containsString(spec.Finalizers, finalizerStringProx) {
+		withFinal := spec.DeepCopy()
+		withFinal.Finalizers = append(withFinal.Finalizers, finalizerStringProx)
+		err = r.Update(ctx, withFinal)
+		return ctrl.Result{Requeue: true}, err
+	}
+
 	// var svcs corev1.ServiceList
 
 	// switch {
@@ -149,6 +171,36 @@ func (r *OAuth2ProxyReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	return ctrl.Result{}, nil
 }
 
+func (r *OAuth2ProxyReconciler) handleDelete(ctx context.Context, spec microcumulusv1beta1.OAuth2Proxy, ing networkv1.Ingress) (ctrl.Result, error) {
+	if !containsString(spec.Finalizers, finalizerStringProx) { // Success case; nothing left to do
+		return ctrl.Result{}, nil
+	}
+
+	if ing.Annotations[annotPreviousRules] != "" {
+		revertedIng := ing.DeepCopy()
+		var oldRules []networkv1.IngressRule
+		err := json.Unmarshal([]byte(ing.Annotations[annotPreviousRules]), &oldRules)
+		if err != nil {
+			return ctrl.Result{Requeue: false}, fmt.Errorf("error unmarshaling annotation to revert ingress rules: %w", err)
+		}
+		revertedIng.Spec.Rules = oldRules
+		delete(revertedIng.Annotations, annotPreviousRules)
+		err = r.Update(ctx, revertedIng)
+		if err != nil {
+			return ctrl.Result{Requeue: false}, fmt.Errorf("error reverting ingress: %w", err)
+		}
+	}
+
+	repl := spec.DeepCopy()
+	repl.Finalizers = removeString(repl.Finalizers, finalizerStringProx)
+
+	err := r.Update(ctx, repl)
+	if err != nil {
+		return ctrl.Result{Requeue: false}, fmt.Errorf("error removing finalizer: %w", err)
+	}
+	return ctrl.Result{}, nil
+}
+
 func (r *OAuth2ProxyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&microcumulusv1beta1.OAuth2Proxy{}).
@@ -163,6 +215,17 @@ func replaceWithOauth2Proxy(ctx context.Context, cs client.Client, ing *networkv
 	rand.Read(bs)
 
 	updatedIng := ing.DeepCopy()
+
+	if ing.Annotations[annotPreviousRules] == "" {
+		oldRules, _ := json.Marshal(ing.Spec.Rules)
+		updatedIng.Annotations[annotPreviousRules] = string(oldRules)
+	} else {
+		// If there are old rules already, make sure we use those for the rest of the setup
+		err := json.Unmarshal([]byte(ing.Annotations[annotPreviousRules]), &updatedIng.Spec.Rules)
+		if err != nil {
+			return fmt.Errorf("error grabbing old rules: %w", err)
+		}
+	}
 
 	for i, rule := range updatedIng.Spec.Rules {
 		be := rule.HTTP.Paths[0].Backend

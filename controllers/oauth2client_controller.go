@@ -34,6 +34,8 @@ import (
 	microcumulusv1beta1 "github.com/microcumulus/oauth2-controller/api/v1beta1"
 )
 
+const finalizerStringClient = "microcumul.us/oauthclient-controller"
+
 // OAuth2ClientReconciler reconciles a OAuth2Client object
 type OAuth2ClientReconciler struct {
 	client.Client
@@ -46,6 +48,7 @@ type OAuth2ClientReconciler struct {
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;update;delete;create;patch;watch
 
 func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res ctrl.Result, err error) {
+	lg := r.Log.WithValues("oauth2client", req.NamespacedName)
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "OAuth2ClientReconciler.Reconcile")
 	defer sp.Finish()
 	defer func() {
@@ -54,23 +57,43 @@ func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			sp.LogKV("error", err)
 		}
 	}()
-	// lg := r.Log.WithValues("oauth2client", req.NamespacedName)
 
-	var c v1beta1.OAuth2Client
-	err = r.Get(ctx, req.NamespacedName, &c)
+	var oac v1beta1.OAuth2Client
+	err = r.Get(ctx, req.NamespacedName, &oac)
 	if err != nil {
-		return ctrl.Result{
-			Requeue: true,
-			// RequeueAfter: 30 * time.Second,
-		}, fmt.Errorf("couldn't get client body: %w", err)
+		if strings.Contains(err.Error(), "not found") {
+			lg.Info("done deleting client customresource")
+			return ctrl.Result{}, nil
+		}
+		return ctrl.Result{}, fmt.Errorf("couldn't get client body: %w", err)
+	}
+
+	// add finalizer string
+	if oac.DeletionTimestamp.IsZero() && !containsString(oac.Finalizers, finalizerStringClient) {
+		withFinal := oac.DeepCopy()
+		withFinal.Finalizers = append(withFinal.Finalizers, finalizerStringClient)
+		err = r.Update(ctx, withFinal)
+		return ctrl.Result{Requeue: true}, err
 	}
 
 	var prov v1beta1.ClusterOAuth2ClientProvider
 	err = r.Get(ctx, client.ObjectKey{
-		Name: c.Spec.ClusterProvider,
+		Name: oac.Spec.ClusterProvider,
 	}, &prov)
 	if err != nil {
-		return res, fmt.Errorf("error getting given clusterprovider %s: %w", c.Spec.ClusterProvider, err)
+		if !oac.ObjectMeta.DeletionTimestamp.IsZero() {
+			if !containsString(oac.Finalizers, finalizerStringClient) {
+				return res, nil
+			}
+			oac2 := oac.DeepCopy()
+			oac2.Finalizers = removeString(oac2.Finalizers, finalizerStringClient)
+			err = r.Update(ctx, oac2)
+			if err != nil {
+				return ctrl.Result{}, fmt.Errorf("error removing finalizer: %w", err)
+			}
+			return ctrl.Result{}, nil
+		}
+		return ctrl.Result{}, fmt.Errorf("error getting provider: %w", err)
 	}
 
 	// TODO: abstract this into a provider interface
@@ -91,7 +114,7 @@ func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		}
 	case prov.Spec.Keycloak.ClientAuth != nil:
 		ca := prov.Spec.Keycloak.ClientAuth
-		sec, err := getSecretVal(ctx, r.Client, c.Namespace, ca.ClientSecret)
+		sec, err := getSecretVal(ctx, r.Client, oac.Namespace, ca.ClientSecret)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("error logging in: %w", err)
 		}
@@ -101,21 +124,50 @@ func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		}
 	}
 
-	c.Spec.ClientID = first(c.Spec.ClientID, c.Spec.ClientName)
+	oac.Spec.ClientID = first(oac.Spec.ClientID, oac.Spec.ClientName)
+
+	// Handling delete
+	if !oac.ObjectMeta.DeletionTimestamp.IsZero() {
+		if !containsString(oac.Finalizers, finalizerStringClient) {
+			return res, nil
+		}
+
+		cls, err := cloak.GetClients(ctx, jwt.AccessToken, "master", gocloak.GetClientsParams{
+			ClientID: &oac.Spec.ClientID,
+		})
+		if err != nil {
+			lg.Error(err, "couldn't list clients by id")
+		}
+		for _, cl := range cls {
+			lg.Info("deleting keycloak client", "client", oac.Spec.ClientID)
+			err = cloak.DeleteClient(ctx, jwt.AccessToken, prov.Spec.Keycloak.Realm, *cl.ID)
+			if err != nil {
+				lg.Error(err, "error while deleting keycloak client", "client", oac.Spec.ClientID, "keycloakID", *cl.ID)
+			}
+		}
+
+		oac2 := oac.DeepCopy()
+		oac2.Finalizers = removeString(oac2.Finalizers, finalizerStringClient)
+		err = r.Update(ctx, oac2)
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("error removing finalizer: %w", err)
+		}
+		return ctrl.Result{}, nil
+	}
 
 	cli := gocloak.Client{
-		ClientID:                &c.Spec.ClientID,
-		RedirectURIs:            &c.Spec.Redirects,
-		Name:                    &c.Spec.ClientName,
-		BaseURL:                 &c.Spec.Redirects[0],
+		ClientID:                &oac.Spec.ClientID,
+		RedirectURIs:            &oac.Spec.Redirects,
+		Name:                    &oac.Spec.ClientName,
+		BaseURL:                 &oac.Spec.Redirects[0],
 		ConsentRequired:         gocloak.BoolP(false),
-		AdminURL:                &c.Spec.Redirects[0],
+		AdminURL:                &oac.Spec.Redirects[0],
 		Enabled:                 gocloak.BoolP(true),
 		PublicClient:            gocloak.BoolP(false),
 		ClientAuthenticatorType: gocloak.StringP("client-secret"),
 	}
 
-	id, secStr, err := getOrCreateClient(ctx, cloak, *jwt, prov.Spec.Keycloak.Realm, cli)
+	_, secStr, err := getOrCreateClient(ctx, cloak, *jwt, prov.Spec.Keycloak.Realm, cli)
 	if err != nil && !strings.Contains(err.Error(), "exists") {
 		return ctrl.Result{}, fmt.Errorf("error creating new client: %w", err)
 	}
@@ -123,42 +175,42 @@ func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	var sec corev1.Secret
 	err = r.Get(ctx, client.ObjectKey{
 		Namespace: req.Namespace,
-		Name:      c.Spec.SecretName,
+		Name:      oac.Spec.SecretName,
 	}, &sec)
 	if err != nil {
 		sec := corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: req.Namespace,
-				Name:      c.Spec.SecretName,
+				Name:      oac.Spec.SecretName,
 				OwnerReferences: []metav1.OwnerReference{{
-					APIVersion: c.APIVersion,
-					Kind:       c.Kind,
-					Name:       c.Name,
-					UID:        c.UID,
+					APIVersion: oac.APIVersion,
+					Kind:       oac.Kind,
+					Name:       oac.Name,
+					UID:        oac.UID,
 				}},
 			},
 			StringData: map[string]string{
-				"id":        id,
+				"id":        oac.Spec.ClientID,
 				"secret":    secStr,
 				"issuerURL": fmt.Sprintf("%s/auth/realms/%s", strings.TrimSuffix(prov.Spec.Keycloak.BaseURL, "/"), strings.TrimPrefix(prov.Spec.Keycloak.Realm, "/")),
 			},
 		}
 		err = r.Create(ctx, &sec)
 		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("error creating requested secret %s/%s: %w", req.Namespace, c.Spec.SecretName, err)
+			return ctrl.Result{}, fmt.Errorf("error creating requested secret %s/%s: %w", req.Namespace, oac.Spec.SecretName, err)
 		}
 		return ctrl.Result{}, nil
 	}
 	sec.Data = nil
 	sec.StringData = map[string]string{
-		"id":        id,
+		"id":        oac.Spec.ClientID,
 		"secret":    secStr,
-		"issuerURL": fmt.Sprintf("%s/%s", strings.TrimSuffix(prov.Spec.Keycloak.BaseURL, "/"), strings.TrimPrefix(prov.Spec.Keycloak.Realm, "/")),
+		"issuerURL": fmt.Sprintf("%s/auth/realms/%s", strings.TrimSuffix(prov.Spec.Keycloak.BaseURL, "/"), strings.TrimPrefix(prov.Spec.Keycloak.Realm, "/")),
 	}
 
 	err = r.Update(ctx, &sec)
 	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("error updating requested secret %s/%s: %w", req.Namespace, c.Spec.SecretName, err)
+		return ctrl.Result{}, fmt.Errorf("error updating requested secret %s/%s: %w", req.Namespace, oac.Spec.SecretName, err)
 	}
 
 	return ctrl.Result{}, nil
@@ -221,4 +273,24 @@ func first(ss ...string) string {
 		}
 	}
 	return ""
+}
+
+// Helper functions to check and remove string from a slice of strings.
+func containsString(slice []string, s string) bool {
+	for _, item := range slice {
+		if item == s {
+			return true
+		}
+	}
+	return false
+}
+
+func removeString(slice []string, s string) (result []string) {
+	for _, item := range slice {
+		if item == s {
+			continue
+		}
+		result = append(result, item)
+	}
+	return
 }

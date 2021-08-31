@@ -111,16 +111,24 @@ func (r *OAuth2ProxyReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      req.Name,
 				Namespace: req.Namespace,
+				OwnerReferences: []metav1.OwnerReference{{
+					APIVersion: spec.APIVersion,
+					Kind:       spec.Kind,
+					Name:       spec.Name,
+					UID:        spec.UID,
+				}},
 			},
 			Spec: microcumulusv1beta1.OAuth2ClientSpec{
 				ClusterProvider: spec.Spec.ClusterClientProvider,
 				Provider:        spec.Spec.ClientProvider,
+				ClientID:        spec.Name,
+				ClientName:      spec.Name,
 				SecretName:      req.Name,
 				Redirects:       uris,
 			},
 		})
 		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("no secret data present, and could not create OAuth2Client object")
+			return ctrl.Result{}, fmt.Errorf("no secret data present, and could not create OAuth2Client object: %w", err)
 		}
 		// Now requeue so the secret is created
 		return ctrl.Result{
@@ -134,7 +142,7 @@ func (r *OAuth2ProxyReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, fmt.Errorf("error getting redis secret: %w", err)
 	}
 
-	err = replaceWithOauth2Proxy(ctx, r.Client, &ing, string(sec.Data["id"]), string(sec.Data["secret"]), string(sec.Data["issuerURL"]), spec.Spec.RedisHost, rSec)
+	err = replaceWithOauth2Proxy(ctx, r.Client, &ing, spec, string(sec.Data["id"]), string(sec.Data["secret"]), string(sec.Data["issuerURL"]), spec.Spec.RedisHost, rSec)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("error replacing ingress with proxy: %w", err)
 	}
@@ -147,7 +155,7 @@ func (r *OAuth2ProxyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func replaceWithOauth2Proxy(ctx context.Context, cs client.Client, ing *networkv1.Ingress, id, sec, issuerURL, redisHost, redisSec string) error {
+func replaceWithOauth2Proxy(ctx context.Context, cs client.Client, ing *networkv1.Ingress, spec microcumulusv1beta1.OAuth2Proxy, id, sec, issuerURL, redisHost, redisSec string) error {
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "replaceWithOauth2Proxy")
 	defer sp.Finish()
 
@@ -170,6 +178,12 @@ func replaceWithOauth2Proxy(ctx context.Context, cs client.Client, ing *networkv
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      n,
 			Namespace: ing.Namespace,
+			OwnerReferences: []metav1.OwnerReference{{
+				APIVersion: spec.APIVersion,
+				Kind:       spec.Kind,
+				Name:       spec.Name,
+				UID:        spec.UID,
+			}},
 		},
 		StringData: m,
 	})
@@ -186,6 +200,12 @@ func replaceWithOauth2Proxy(ctx context.Context, cs client.Client, ing *networkv
 		Annotations: map[string]string{
 			"microcumul.us/injectssl": "microcumulus-ca",
 		},
+		OwnerReferences: []metav1.OwnerReference{{
+			APIVersion: spec.APIVersion,
+			Kind:       spec.Kind,
+			Name:       spec.Name,
+			UID:        spec.UID,
+		}},
 	}
 
 	var env []corev1.EnvVar

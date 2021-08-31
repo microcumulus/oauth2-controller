@@ -59,6 +59,7 @@ spec:
                   provisioned client's metadata
                 type: string
             required:
+            - clientName
             - redirects
             - secretName
             type: object

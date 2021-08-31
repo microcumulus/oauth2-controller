@@ -101,6 +101,8 @@ func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		}
 	}
 
+	c.Spec.ClientID = first(c.Spec.ClientID, c.Spec.ClientName)
+
 	cli := gocloak.Client{
 		ClientID:                &c.Spec.ClientID,
 		RedirectURIs:            &c.Spec.Redirects,
@@ -113,17 +115,9 @@ func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		ClientAuthenticatorType: gocloak.StringP("client-secret"),
 	}
 
-	id, err := cloak.CreateClient(ctx, jwt.AccessToken, prov.Spec.Keycloak.Realm, cli)
+	id, secStr, err := getOrCreateClient(ctx, cloak, *jwt, prov.Spec.Keycloak.Realm, cli)
 	if err != nil && !strings.Contains(err.Error(), "exists") {
 		return ctrl.Result{}, fmt.Errorf("error creating new client: %w", err)
-	}
-
-	cred, err := cloak.RegenerateClientSecret(ctx, jwt.AccessToken, prov.Spec.Keycloak.Realm, id)
-	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("error regenerating secret: %w", err)
-	}
-	if cred.Value == nil {
-		return ctrl.Result{}, fmt.Errorf("regenerated secret had a nil value somehow: %v", cred)
 	}
 
 	var sec corev1.Secret
@@ -136,11 +130,17 @@ func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: req.Namespace,
 				Name:      c.Spec.SecretName,
+				OwnerReferences: []metav1.OwnerReference{{
+					APIVersion: c.APIVersion,
+					Kind:       c.Kind,
+					Name:       c.Name,
+					UID:        c.UID,
+				}},
 			},
 			StringData: map[string]string{
 				"id":        id,
-				"secret":    *cred.Value,
-				"issuerURL": fmt.Sprintf("%s/%s", strings.TrimSuffix(prov.Spec.Keycloak.BaseURL, "/"), strings.TrimPrefix(prov.Spec.Keycloak.Realm, "/")),
+				"secret":    secStr,
+				"issuerURL": fmt.Sprintf("%s/auth/realms/%s", strings.TrimSuffix(prov.Spec.Keycloak.BaseURL, "/"), strings.TrimPrefix(prov.Spec.Keycloak.Realm, "/")),
 			},
 		}
 		err = r.Create(ctx, &sec)
@@ -152,7 +152,7 @@ func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	sec.Data = nil
 	sec.StringData = map[string]string{
 		"id":        id,
-		"secret":    *cred.Value,
+		"secret":    secStr,
 		"issuerURL": fmt.Sprintf("%s/%s", strings.TrimSuffix(prov.Spec.Keycloak.BaseURL, "/"), strings.TrimPrefix(prov.Spec.Keycloak.Realm, "/")),
 	}
 
@@ -162,6 +162,37 @@ func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func getOrCreateClient(ctx context.Context, cli gocloak.GoCloak, jwt gocloak.JWT, realm string, c gocloak.Client) (string, string, error) {
+	cl, err := cli.GetClients(ctx, jwt.AccessToken, "master", gocloak.GetClientsParams{
+		ClientID: c.ClientID,
+	})
+	if err == nil && len(cl) == 1 {
+		cred, err := cli.GetClientSecret(ctx, jwt.AccessToken, "master", *cl[0].ID)
+		if err != nil {
+			return "", "", fmt.Errorf("couldn't get client secret: %w", err)
+		}
+		if cred.Value != nil && *cred.Value != "" {
+			return *cl[0].ClientID, *cred.Value, nil
+		}
+	}
+
+	id, err := cli.CreateClient(ctx, jwt.AccessToken, realm, c)
+	if err != nil {
+		return "", "", fmt.Errorf("couldn't create client: %w", err)
+	}
+
+	cred, err := cli.RegenerateClientSecret(ctx, jwt.AccessToken, realm, id)
+	if err != nil {
+		return "", "", fmt.Errorf("error regenerating secret: %w", err)
+	}
+
+	if cred.Value == nil {
+		return "", "", fmt.Errorf("regenerated secret had a nil value somehow: %v", cred)
+	}
+
+	return id, *cred.Value, nil
 }
 
 func getSecretVal(ctx context.Context, r client.Client, ns string, sel *corev1.SecretKeySelector) (string, error) {
@@ -181,4 +212,13 @@ func (r *OAuth2ClientReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&microcumulusv1beta1.OAuth2Client{}).
 		Complete(r)
+}
+
+func first(ss ...string) string {
+	for _, s := range ss {
+		if s != "" {
+			return s
+		}
+	}
+	return ""
 }

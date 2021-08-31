@@ -30,7 +30,7 @@ type OAuth2ClientSpec struct {
 	// ClientID is the optional clientid that the client should have.
 	ClientID string `json:"clientID,omitempty"`
 	// ClientName is the name of the client in keycloak.
-	ClientName string `json:"clientName,omitempty"`
+	ClientName string `json:"clientName"`
 
 	// SecretName is the desired secret that should hold the provisioned client's metadata
 	SecretName string `json:"secretName"`

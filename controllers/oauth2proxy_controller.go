@@ -159,143 +159,144 @@ func replaceWithOauth2Proxy(ctx context.Context, cs client.Client, ing *networkv
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "replaceWithOauth2Proxy")
 	defer sp.Finish()
 
-	n := fmt.Sprintf("%s-oauth2-proxy", ing.Name)
-
 	bs := make([]byte, 16)
 	rand.Read(bs)
 
-	be := ing.Spec.Rules[0].HTTP.Paths[0].Backend
-	m := map[string]string{
-		"UPSTREAM":        fmt.Sprintf("http://%s:%d", be.Service.Name, be.Service.Port.Number),
-		"OIDC_ISSUER_URL": issuerURL,
-		"CLIENT_ID":       n,
-		"CLIENT_SECRET":   sec,
-		"COOKIE_SECRET":   base64.StdEncoding.EncodeToString(bs),
-		"REDIS_PASSWORD":  redisSec,
-	}
+	updatedIng := ing.DeepCopy()
 
-	err := cs.Create(ctx, &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      n,
+	for i, rule := range updatedIng.Spec.Rules {
+		be := rule.HTTP.Paths[0].Backend
+		m := map[string]string{
+			"UPSTREAM":        fmt.Sprintf("http://%s:%d", be.Service.Name, be.Service.Port.Number),
+			"OIDC_ISSUER_URL": issuerURL,
+			"CLIENT_ID":       id,
+			"CLIENT_SECRET":   sec,
+			"COOKIE_SECRET":   base64.StdEncoding.EncodeToString(bs),
+			"REDIS_PASSWORD":  redisSec,
+		}
+
+		proxName := fmt.Sprintf("oauth2-proxy-%s-%s", id, be.Service.Name)
+
+		err := cs.Create(ctx, &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      proxName,
+				Namespace: ing.Namespace,
+				OwnerReferences: []metav1.OwnerReference{{
+					APIVersion: spec.APIVersion,
+					Kind:       spec.Kind,
+					Name:       spec.Name,
+					UID:        spec.UID,
+				}},
+			},
+			StringData: m,
+		})
+		if err != nil && !strings.Contains(err.Error(), "exists") {
+			return fmt.Errorf("error creating secret: %w", err)
+		}
+
+		om := metav1.ObjectMeta{
+			Name:      proxName,
 			Namespace: ing.Namespace,
+			Labels: map[string]string{
+				"app":  id,
+				"tier": "proxy",
+			},
+			Annotations: map[string]string{
+				"microcumul.us/injectssl": "microcumulus-ca", // TODO: remove
+			},
 			OwnerReferences: []metav1.OwnerReference{{
 				APIVersion: spec.APIVersion,
 				Kind:       spec.Kind,
 				Name:       spec.Name,
 				UID:        spec.UID,
 			}},
-		},
-		StringData: m,
-	})
-	if err != nil && !strings.Contains(err.Error(), "exists") {
-		return fmt.Errorf("error creating secret: %w", err)
-	}
+		}
 
-	om := metav1.ObjectMeta{
-		Name:      n,
-		Namespace: ing.Namespace,
-		Labels: map[string]string{
-			"app": n,
-		},
-		Annotations: map[string]string{
-			"microcumul.us/injectssl": "microcumulus-ca",
-		},
-		OwnerReferences: []metav1.OwnerReference{{
-			APIVersion: spec.APIVersion,
-			Kind:       spec.Kind,
-			Name:       spec.Name,
-			UID:        spec.UID,
-		}},
-	}
-
-	var env []corev1.EnvVar
-	for k := range m {
-		env = append(env, corev1.EnvVar{
-			Name: "OAUTH2_PROXY_" + k,
-			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: n,
+		var env []corev1.EnvVar
+		for k := range m {
+			env = append(env, corev1.EnvVar{
+				Name: "OAUTH2_PROXY_" + k,
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: proxName,
+						},
+						Key: k,
 					},
-					Key: k,
+				},
+			})
+		}
+
+		probe := corev1.Probe{
+			InitialDelaySeconds: 0,
+			Handler: corev1.Handler{
+				HTTPGet: &corev1.HTTPGetAction{
+					Path: "/ping",
+					Port: intstr.FromInt(4180),
+				},
+			},
+		}
+		err = cs.Create(ctx, &appsv1.Deployment{
+			ObjectMeta: om,
+			Spec: appsv1.DeploymentSpec{
+				Replicas: &one32,
+				Selector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"app": id,
+					},
+				},
+				Template: corev1.PodTemplateSpec{
+					ObjectMeta: om,
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{{
+							Name:  id,
+							Image: "quay.io/oauth2-proxy/oauth2-proxy:latest",
+							Args: []string{
+								"--upstream=$(OAUTH2_PROXY_UPSTREAM)",
+								"--provider=oidc",
+								"--provider-display-name=Keycloak",
+								"--http-address=0.0.0.0:4180",
+								"--email-domain=*",
+								"--session-store-type=redis",
+								"--cookie-secure=true",
+								"--redis-connection-url=redis://" + redisHost,
+								`--banner=<img src="https://microcumul.us/images/logo/logo.svg" alt="microcumulus logo" />`,
+								"--custom-sign-in-logo=-",
+							},
+							Env: env,
+							Ports: []corev1.ContainerPort{{
+								ContainerPort: 4180,
+								Protocol:      corev1.ProtocolTCP,
+							}},
+							LivenessProbe:  &probe,
+							ReadinessProbe: &probe,
+						}},
+					},
 				},
 			},
 		})
-	}
 
-	probe := corev1.Probe{
-		InitialDelaySeconds: 0,
-		Handler: corev1.Handler{
-			HTTPGet: &corev1.HTTPGetAction{
-				Path: "/ping",
-				Port: intstr.FromInt(4180),
+		if err != nil && !strings.Contains(err.Error(), "exists") {
+			return fmt.Errorf("error creating deployment: %w", err)
+		}
+
+		err = cs.Create(ctx, &corev1.Service{
+			ObjectMeta: om,
+			Spec: corev1.ServiceSpec{
+				Type:     corev1.ServiceTypeClusterIP,
+				Selector: om.Labels,
+				Ports: []corev1.ServicePort{{
+					Protocol:   corev1.ProtocolTCP,
+					Name:       proxName,
+					Port:       80,
+					TargetPort: intstr.FromInt(4180),
+				}},
 			},
-		},
-	}
-	err = cs.Create(ctx, &appsv1.Deployment{
-		ObjectMeta: om,
-		Spec: appsv1.DeploymentSpec{
-			Replicas: &one32,
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					"app": n,
-				},
-			},
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: om,
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{{
-						Name:  n,
-						Image: "quay.io/oauth2-proxy/oauth2-proxy:latest",
-						Args: []string{
-							"--upstream=$(OAUTH2_PROXY_UPSTREAM)",
-							"--provider=oidc",
-							"--provider-display-name=Keycloak",
-							"--http-address=0.0.0.0:4180",
-							"--email-domain=*",
-							"--session-store-type=redis",
-							"--cookie-secure=true",
-							"--redis-connection-url=redis://" + redisHost,
-							`--banner=<img src="https://microcumul.us/images/logo/logo.svg" alt="microcumulus logo" />`,
-							"--custom-sign-in-logo=-",
-						},
-						Env: env,
-						Ports: []corev1.ContainerPort{{
-							ContainerPort: 4180,
-							Protocol:      corev1.ProtocolTCP,
-						}},
-						LivenessProbe:  &probe,
-						ReadinessProbe: &probe,
-					}},
-				},
-			},
-		},
-	})
+		})
+		if err != nil && !strings.Contains(err.Error(), "exists") {
+			return fmt.Errorf("error creating oidc service: %w", err)
+		}
 
-	if err != nil && !strings.Contains(err.Error(), "exists") {
-		return fmt.Errorf("error creating deployment: %w", err)
-	}
-
-	err = cs.Create(ctx, &corev1.Service{
-		ObjectMeta: om,
-		Spec: corev1.ServiceSpec{
-			Type:     corev1.ServiceTypeClusterIP,
-			Selector: om.Labels,
-			Ports: []corev1.ServicePort{{
-				Protocol:   corev1.ProtocolTCP,
-				Name:       n,
-				Port:       80,
-				TargetPort: intstr.FromInt(4180),
-			}},
-		},
-	})
-	if err != nil && !strings.Contains(err.Error(), "exists") {
-		return fmt.Errorf("error creating oidc service: %w", err)
-	}
-
-	updatedIng := ing.DeepCopy()
-
-	for i := range updatedIng.Spec.Rules {
 		for j := range updatedIng.Spec.Rules[i].HTTP.Paths {
 			updatedIng.Spec.Rules[i].HTTP.Paths[j].Backend = networkv1.IngressBackend{
 				Service: &networkv1.IngressServiceBackend{
@@ -308,7 +309,7 @@ func replaceWithOauth2Proxy(ctx context.Context, cs client.Client, ing *networkv
 		}
 	}
 
-	err = cs.Update(ctx, updatedIng)
+	err := cs.Update(ctx, updatedIng)
 	if err != nil && !strings.Contains(err.Error(), "exists") {
 		return fmt.Errorf("error updating ingress: %w", err)
 	}

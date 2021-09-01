@@ -155,6 +155,25 @@ func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, nil
 	}
 
+	var mappers []gocloak.ProtocolMapperRepresentation
+	if prov.Spec.Keycloak.GroupClaimName != "" {
+		conf := map[string]string{
+			"claim.name":           prov.Spec.Keycloak.GroupClaimName,
+			"multivalued":          "true",
+			"jsonType.label":       "String",
+			"id.token.claim":       "true",
+			"access.token.claim":   "true",
+			"userinfo.token.claim": "true",
+			"user.attribute":       "foo", // is this needed? idk. The webUI sends it in devtools.
+		}
+		mappers = append(mappers, gocloak.ProtocolMapperRepresentation{
+			Name:           gocloak.StringP("groups"),
+			Protocol:       gocloak.StringP("openid-connect"),
+			ProtocolMapper: gocloak.StringP("oidc-usermodel-realm-role-mapper"),
+			Config:         &conf,
+		})
+	}
+
 	cli := gocloak.Client{
 		ClientID:                &oac.Spec.ClientID,
 		RedirectURIs:            &oac.Spec.Redirects,
@@ -165,6 +184,7 @@ func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		Enabled:                 gocloak.BoolP(true),
 		PublicClient:            gocloak.BoolP(false),
 		ClientAuthenticatorType: gocloak.StringP("client-secret"),
+		ProtocolMappers:         &mappers,
 	}
 
 	_, secStr, err := getOrCreateClient(ctx, cloak, *jwt, prov.Spec.Keycloak.Realm, cli)

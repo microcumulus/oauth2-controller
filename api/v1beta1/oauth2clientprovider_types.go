@@ -44,6 +44,8 @@ type KeycloakProvider struct {
 	// ClientAuth allows the provider code to authenticate with a keycloak client
 	// credential grant
 	ClientAuth *ClientAuth `json:"clientAuth,omitempty"`
+	// GroupClaimName configures the claim name the keycloak provider will set up as a client mapper.
+	GroupClaimName string `json:"groupClaimName,omitempty"`
 }
 
 // UserAuth allows the provider to authenticate with a known keycloak user/pass

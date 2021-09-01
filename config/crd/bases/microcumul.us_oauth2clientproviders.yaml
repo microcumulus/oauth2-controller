@@ -73,6 +73,10 @@ spec:
                     - clientID
                     - clientSecret
                     type: object
+                  groupClaimName:
+                    description: GroupClaimName configures the claim name the keycloak
+                      provider will set up as a client mapper.
+                    type: string
                   realm:
                     description: Realm is the keycloak Realm for which we have credentials
                       and will provision clients.

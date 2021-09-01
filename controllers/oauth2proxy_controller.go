@@ -264,9 +264,6 @@ func replaceWithOauth2Proxy(ctx context.Context, cs client.Client, ing *networkv
 			"CLIENT_SECRET":   opts.secret,
 			"COOKIE_SECRET":   base64.StdEncoding.EncodeToString(bs),
 		}
-		for k, v := range opts.optsMap {
-			m[k] = v
-		}
 		if opts.redisPass != "" {
 			m["REDIS_PASSWORD"] = opts.redisPass
 		}
@@ -275,6 +272,12 @@ func replaceWithOauth2Proxy(ctx context.Context, cs client.Client, ing *networkv
 		}
 		if opts.groups != nil {
 			m["ALLOWED_GROUPS"] = strings.Join(opts.groups, ",")
+			m["SCOPE"] = "offline_access openid profile roles email"
+		}
+
+		// TODO smart merging?
+		for k, v := range opts.optsMap {
+			m[k] = v
 		}
 
 		proxName := fmt.Sprintf("oauth2-proxy-%s-%s", opts.id, be.Service.Name)

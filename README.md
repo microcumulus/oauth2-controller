@@ -55,7 +55,7 @@ apiVersion: microcumul.us/v1beta1
 kind: OAuth2Client
 metadata:
   name: grafana
-  namespace: kube-system
+  namespace: grafana
 spec:
   clusterProvider: keycloak
   clientName: grafana
@@ -63,4 +63,62 @@ spec:
   secretName: grafana-oidc # will have values for id, secret, and issuerURL
   redirects:
     - https://grafana.example.com/*
+---
+# An example grafana deployment that uses the above-configured client
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: grafana
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      containers:
+      - name: grafana
+        image: grafana/grafana
+        env:
+          # you'll also need all the GF_DATABASE_* properties, of course
+          - name: GRAFANA_SSL_MODE
+            value: verify-full
+          - name: GF_AUTH_GENERIC_OAUTH_ENABLED
+            value: "true"
+          - name: GF_AUTH_GENERIC_OAUTH_SCOPES
+            value: "email profile"
+          - name: GF_AUTH_GENERIC_OAUTH_CLIENT_ID
+            valueFrom:
+              secretKeyRef:
+                name: grafana-oidc
+                key: id
+          - name: GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: grafana-oidc
+                key: secret
+          - name: OIDC_BASE
+            valueFrom:
+              secretKeyRef:
+                name: grafana-oidc
+                key: issuerURL
+          - name: GF_AUTH_GENERIC_OAUTH_AUTH_URL
+            value: "$(OIDC_BASE)/protocol/openid-connect/auth"
+          - name: GF_AUTH_GENERIC_OAUTH_TOKEN_URL
+            value: "$(OIDC_BASE)/protocol/openid-connect/token"
+          - name: GF_AUTH_GENERIC_OAUTH_API_URL
+            value: "$(OIDC_BASE)/protocol/openid-connect/userinfo"
+          - name: GF_SERVER_ROOT_URL
+            value: https://grafana.astuart.co
+        ports:
+        - containerPort: 3000
 ```

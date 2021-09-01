@@ -159,12 +159,12 @@ func (r *OAuth2ProxyReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		}, nil
 	}
 
-	rSec, err := getSecretVal(ctx, r.Client, spec.Spec.RedisPasswordRef.Namespace, spec.Spec.RedisPasswordRef.SecretKeySelector)
+	rSec, err := getSecretVal(ctx, r.Client, spec.Spec.SessionStore.Redis.PasswordRef.Namespace, spec.Spec.SessionStore.Redis.PasswordRef.SecretKeySelector)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("error getting redis secret: %w", err)
 	}
 
-	err = replaceWithOauth2Proxy(ctx, r.Client, &ing, spec, string(sec.Data["id"]), string(sec.Data["secret"]), string(sec.Data["issuerURL"]), spec.Spec.RedisHost, rSec)
+	err = replaceWithOauth2Proxy(ctx, r.Client, &ing, spec, string(sec.Data["id"]), string(sec.Data["secret"]), string(sec.Data["issuerURL"]), spec.Spec.SessionStore.Redis.Host, rSec)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("error replacing ingress with proxy: %w", err)
 	}
@@ -235,7 +235,9 @@ func replaceWithOauth2Proxy(ctx context.Context, cs client.Client, ing *networkv
 			"CLIENT_ID":       id,
 			"CLIENT_SECRET":   sec,
 			"COOKIE_SECRET":   base64.StdEncoding.EncodeToString(bs),
-			"REDIS_PASSWORD":  redisSec,
+		}
+		if redisSec != "" {
+			m["REDIS_PASSWORD"] = redisSec
 		}
 
 		proxName := fmt.Sprintf("oauth2-proxy-%s-%s", id, be.Service.Name)

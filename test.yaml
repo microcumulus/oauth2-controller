@@ -20,11 +20,13 @@ metadata:
   namespace: oauth2-proxy-controller-system
 spec:
   clusterClientProvider: keycloak
-  redisHost: redis-master
-  redisPasswordRef:
-    namespace: default
-    name: redis
-    key: redis-password
+  sessionStore:
+    redis: 
+      host: redis-master
+      passwordRef:
+        namespace: default
+        name: redis
+        key: redis-password
   ingress:
     namespace: default
     name: example-ingress

@@ -29,7 +29,7 @@ type OAuth2ClientProviderSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// Keycloak providers can provision oauth2 clients from openid connect
+	// Keycloak providers can provision oauth2 (oidc) clients from keycloak instances
 	Keycloak *KeycloakProvider `json:"keycloak"`
 }
 

@@ -248,6 +248,9 @@ func getOrCreateClient(ctx context.Context, cli gocloak.GoCloak, jwt gocloak.JWT
 }
 
 func getSecretVal(ctx context.Context, r client.Client, ns string, sel *corev1.SecretKeySelector) (string, error) {
+	if sel == nil {
+		return "", nil
+	}
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "OAuth2ClientReconciler.getSecretVal", opentracing.Tags{"name": sel.Name, "namespace": ns})
 	defer sp.Finish()
 	var sec corev1.Secret

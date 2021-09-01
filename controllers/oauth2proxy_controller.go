@@ -52,6 +52,12 @@ type OAuth2ProxyReconciler struct {
 	Scheme *runtime.Scheme
 }
 
+func (r *OAuth2ProxyReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	return ctrl.NewControllerManagedBy(mgr).
+		For(&microcumulusv1beta1.OAuth2Proxy{}).
+		Complete(r)
+}
+
 // +kubebuilder:rbac:groups=microcumul.us,resources=oauth2proxies,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=microcumul.us,resources=oauth2proxies/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses,verbs=get;update;patch;create;delete;list;watch
@@ -116,7 +122,6 @@ func (r *OAuth2ProxyReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// 		}
 	// 		svcs.Items = []corev1.Service{svc}
 	// }
-
 	// Check for oidc secrets values; create if not exist
 	var sec corev1.Secret
 	err = r.Get(ctx, req.NamespacedName, &sec)
@@ -164,11 +169,29 @@ func (r *OAuth2ProxyReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, fmt.Errorf("error getting redis secret: %w", err)
 	}
 
-	err = replaceWithOauth2Proxy(ctx, r.Client, &ing, spec, string(sec.Data["id"]), string(sec.Data["secret"]), string(sec.Data["issuerURL"]), spec.Spec.SessionStore.Redis.Host, rSec)
+	groupClaim, err := r.getGroupClaim(ctx, spec)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("couldn't get jwt group claim key from provider: %w", err)
+	}
+
+	err = replaceWithOauth2Proxy(ctx, r.Client, &ing, spec, oa2ProxyOpts{
+		id:         string(sec.Data["id"]),
+		secret:     string(sec.Data["secret"]),
+		issuerURL:  string(sec.Data["issuerURL"]),
+		redisHost:  spec.Spec.SessionStore.Redis.Host,
+		redisPass:  rSec,
+		groupClaim: groupClaim,
+		groups:     spec.Spec.AllowedGroups,
+		optsMap:    spec.Spec.ProxyOpts,
+	})
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("error replacing ingress with proxy: %w", err)
 	}
 	return ctrl.Result{}, nil
+}
+
+func (r *OAuth2ProxyReconciler) getGroupClaim(ctx context.Context, spec microcumulusv1beta1.OAuth2Proxy) (string, error) {
+	return "groups", nil
 }
 
 func (r *OAuth2ProxyReconciler) handleDelete(ctx context.Context, spec microcumulusv1beta1.OAuth2Proxy, ing networkv1.Ingress) (ctrl.Result, error) {
@@ -201,13 +224,18 @@ func (r *OAuth2ProxyReconciler) handleDelete(ctx context.Context, spec microcumu
 	return ctrl.Result{}, nil
 }
 
-func (r *OAuth2ProxyReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&microcumulusv1beta1.OAuth2Proxy{}).
-		Complete(r)
+type oa2ProxyOpts struct {
+	id         string
+	secret     string
+	issuerURL  string
+	redisHost  string
+	redisPass  string
+	groupClaim string
+	groups     []string
+	optsMap    map[string]string
 }
 
-func replaceWithOauth2Proxy(ctx context.Context, cs client.Client, ing *networkv1.Ingress, spec microcumulusv1beta1.OAuth2Proxy, id, sec, issuerURL, redisHost, redisSec string) error {
+func replaceWithOauth2Proxy(ctx context.Context, cs client.Client, ing *networkv1.Ingress, spec microcumulusv1beta1.OAuth2Proxy, opts oa2ProxyOpts) error {
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "replaceWithOauth2Proxy")
 	defer sp.Finish()
 
@@ -231,16 +259,25 @@ func replaceWithOauth2Proxy(ctx context.Context, cs client.Client, ing *networkv
 		be := rule.HTTP.Paths[0].Backend
 		m := map[string]string{
 			"UPSTREAM":        fmt.Sprintf("http://%s:%d", be.Service.Name, be.Service.Port.Number),
-			"OIDC_ISSUER_URL": issuerURL,
-			"CLIENT_ID":       id,
-			"CLIENT_SECRET":   sec,
+			"OIDC_ISSUER_URL": opts.issuerURL,
+			"CLIENT_ID":       opts.id,
+			"CLIENT_SECRET":   opts.secret,
 			"COOKIE_SECRET":   base64.StdEncoding.EncodeToString(bs),
 		}
-		if redisSec != "" {
-			m["REDIS_PASSWORD"] = redisSec
+		for k, v := range opts.optsMap {
+			m[k] = v
+		}
+		if opts.redisPass != "" {
+			m["REDIS_PASSWORD"] = opts.redisPass
+		}
+		if opts.groupClaim != "" {
+			m["OIDC_GROUPS_CLAIM"] = opts.groupClaim
+		}
+		if opts.groups != nil {
+			m["ALLOWED_GROUPS"] = strings.Join(opts.groups, ",")
 		}
 
-		proxName := fmt.Sprintf("oauth2-proxy-%s-%s", id, be.Service.Name)
+		proxName := fmt.Sprintf("oauth2-proxy-%s-%s", opts.id, be.Service.Name)
 
 		err := cs.Create(ctx, &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
@@ -263,7 +300,7 @@ func replaceWithOauth2Proxy(ctx context.Context, cs client.Client, ing *networkv
 			Name:      proxName,
 			Namespace: ing.Namespace,
 			Labels: map[string]string{
-				"app":  id,
+				"app":  opts.id,
 				"tier": "proxy",
 			},
 			Annotations: map[string]string{
@@ -307,14 +344,14 @@ func replaceWithOauth2Proxy(ctx context.Context, cs client.Client, ing *networkv
 				Replicas: &one32,
 				Selector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{
-						"app": id,
+						"app": opts.id,
 					},
 				},
 				Template: corev1.PodTemplateSpec{
 					ObjectMeta: om,
 					Spec: corev1.PodSpec{
 						Containers: []corev1.Container{{
-							Name:  id,
+							Name:  opts.id,
 							Image: "quay.io/oauth2-proxy/oauth2-proxy:latest",
 							Args: []string{
 								"--upstream=$(OAUTH2_PROXY_UPSTREAM)",
@@ -324,7 +361,7 @@ func replaceWithOauth2Proxy(ctx context.Context, cs client.Client, ing *networkv
 								"--email-domain=*",
 								"--session-store-type=redis",
 								"--cookie-secure=true",
-								"--redis-connection-url=redis://" + redisHost,
+								"--redis-connection-url=redis://" + opts.redisHost,
 								`--banner=<img src="https://microcumul.us/images/logo/logo.svg" alt="microcumulus logo" />`,
 								"--custom-sign-in-logo=-",
 							},

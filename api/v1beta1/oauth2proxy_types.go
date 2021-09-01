@@ -48,6 +48,16 @@ type OAuth2ProxySpec struct {
 
 	// Service instructs the controller to target a specific single service.
 	Service *v1.ObjectReference `json:"service,omitempty"`
+
+	AllowedGroups []string `json:"allowedGroups,omitempty"`
+
+	// All ProxyOpts that can be passed as environment variables can be specified
+	// here. See
+	// https://oauth2-proxy.github.io/oauth2-proxy/docs/configuration/overview
+	// (or the latest equivalent of
+	// https://github.com/oauth2-proxy/oauth2-proxy/blob/e6223383e5ff68709afe8e47d3e91b499e5802ad/docs/docs/configuration/overview.md)
+	// if the page is gone.
+	ProxyOpts map[string]string `json:"proxyOpts,omitempty"`
 }
 
 type SessionStore struct {

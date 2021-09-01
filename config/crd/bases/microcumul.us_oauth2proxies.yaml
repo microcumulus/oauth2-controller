@@ -36,6 +36,10 @@ spec:
           spec:
             description: OAuth2ProxySpec defines the desired state of OAuth2Proxy
             properties:
+              allowedGroups:
+                items:
+                  type: string
+                type: array
               clientProvider:
                 type: string
               clientType:
@@ -124,28 +128,13 @@ spec:
                       are ANDed.
                     type: object
                 type: object
-              redisHost:
-                type: string
-              redisPasswordRef:
-                description: RedisPasswordRef refers to the password to a redis instance,
-                  to be used for session storage
-                properties:
-                  key:
-                    description: The key of the secret to select from.  Must be a
-                      valid secret key.
-                    type: string
-                  name:
-                    description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                      TODO: Add other useful fields. apiVersion, kind, uid?'
-                    type: string
-                  namespace:
-                    type: string
-                  optional:
-                    description: Specify whether the Secret or its key must be defined
-                    type: boolean
-                required:
-                - key
-                - namespace
+              proxyOpts:
+                additionalProperties:
+                  type: string
+                description: All ProxyOpts that can be passed as environment variables
+                  can be specified here. See https://oauth2-proxy.github.io/oauth2-proxy/docs/configuration/overview
+                  (or the latest equivalent of https://github.com/oauth2-proxy/oauth2-proxy/blob/e6223383e5ff68709afe8e47d3e91b499e5802ad/docs/docs/configuration/overview.md)
+                  if the page is gone.
                 type: object
               service:
                 description: Service instructs the controller to target a specific
@@ -229,10 +218,41 @@ spec:
                       are ANDed.
                     type: object
                 type: object
+              sessionStore:
+                properties:
+                  redis:
+                    properties:
+                      host:
+                        type: string
+                      passwordRef:
+                        properties:
+                          key:
+                            description: The key of the secret to select from.  Must
+                              be a valid secret key.
+                            type: string
+                          name:
+                            description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                              TODO: Add other useful fields. apiVersion, kind, uid?'
+                            type: string
+                          namespace:
+                            type: string
+                          optional:
+                            description: Specify whether the Secret or its key must
+                              be defined
+                            type: boolean
+                        required:
+                        - key
+                        - namespace
+                        type: object
+                    required:
+                    - host
+                    type: object
+                required:
+                - redis
+                type: object
             required:
             - ingress
-            - redisHost
-            - redisPasswordRef
+            - sessionStore
             type: object
           status:
             description: OAuth2ProxyStatus defines the observed state of OAuth2Proxy

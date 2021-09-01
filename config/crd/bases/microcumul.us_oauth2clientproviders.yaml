@@ -38,8 +38,8 @@ spec:
             description: OAuth2ClientProviderSpec defines the desired state of OAuth2ClientProvider
             properties:
               keycloak:
-                description: Keycloak providers can provision oauth2 clients from
-                  openid connect
+                description: Keycloak providers can provision oauth2 (oidc) clients
+                  from keycloak instances
                 properties:
                   baseURL:
                     description: BaseURL is the externally-accessible base URL for

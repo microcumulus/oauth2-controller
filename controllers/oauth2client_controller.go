@@ -137,6 +137,10 @@ func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		})
 		if err != nil {
 			lg.Error(err, "couldn't list clients by id")
+			return ctrl.Result{}, nil
+		}
+		if len(cls) == 0 {
+			return ctrl.Result{}, nil
 		}
 		for _, cl := range cls {
 			lg.Info("deleting keycloak client", "client", oac.Spec.ClientID)

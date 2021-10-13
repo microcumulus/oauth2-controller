@@ -17,9 +17,11 @@ limitations under the License.
 package controllers
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"strings"
+	"text/template"
 
 	"github.com/Nerzal/gocloak/v8"
 	"github.com/go-logr/logr"
@@ -48,6 +50,11 @@ type OAuth2ClientReconciler struct {
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;update;delete;create;patch;watch
 
 func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res ctrl.Result, err error) {
+	defer func() {
+		if err := recover(); err != nil {
+			r.Log.WithValues("recovered", err).Info("recovered from panic")
+		}
+	}()
 	lg := r.Log.WithValues("oauth2client", req.NamespacedName)
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "OAuth2ClientReconciler.Reconcile")
 	defer sp.Finish()
@@ -57,7 +64,6 @@ func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			sp.LogKV("error", err)
 		}
 	}()
-
 	var oac v1beta1.OAuth2Client
 	err = r.Get(ctx, req.NamespacedName, &oac)
 	if err != nil {
@@ -73,14 +79,17 @@ func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		withFinal := oac.DeepCopy()
 		withFinal.Finalizers = append(withFinal.Finalizers, finalizerStringClient)
 		err = r.Update(ctx, withFinal)
+		lg.V(1).Info("added finalizer; requeuing")
 		return ctrl.Result{Requeue: true}, err
 	}
+	lg.V(1).Info("got req with finalizer")
 
 	var prov v1beta1.ClusterOAuth2ClientProvider
 	err = r.Get(ctx, client.ObjectKey{
 		Name: oac.Spec.ClusterProvider,
 	}, &prov)
 	if err != nil {
+		lg.Error(err, "could not find provider with %s", oac.Spec.ClusterProvider)
 		if !oac.ObjectMeta.DeletionTimestamp.IsZero() {
 			if !containsString(oac.Finalizers, finalizerStringClient) {
 				return res, nil
@@ -196,6 +205,36 @@ func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, fmt.Errorf("error creating new client: %w", err)
 	}
 
+	data := map[string]string{
+		"id":        oac.Spec.ClientID,
+		"secret":    secStr,
+		"issuerURL": fmt.Sprintf("%s/auth/realms/%s", strings.TrimSuffix(prov.Spec.Keycloak.BaseURL, "/"), strings.TrimPrefix(prov.Spec.Keycloak.Realm, "/")),
+	}
+	if oac.Spec.SecretTemplate != nil {
+		data = map[string]string{}
+		for k, tplStr := range oac.Spec.SecretTemplate {
+			lg := lg.WithValues("template", tplStr, "templateKey", k)
+			buf := &bytes.Buffer{}
+			tpl, err := template.New(k).Parse(tplStr)
+			if err != nil {
+				lg.Error(err, "could not template secret")
+				return ctrl.Result{}, err
+			}
+
+			err = tpl.Execute(buf, map[string]interface{}{
+				"ClientID":     oac.Spec.ClientID,
+				"ClientSecret": secStr,
+				"IssuerURL":    fmt.Sprintf("%s/auth/realms/%s", strings.TrimSuffix(prov.Spec.Keycloak.BaseURL, "/"), strings.TrimPrefix(prov.Spec.Keycloak.Realm, "/")),
+			})
+			if err != nil {
+				lg.Error(err, "error while executing template")
+				return ctrl.Result{}, err
+			}
+
+			data[k] = buf.String()
+		}
+	}
+
 	var sec corev1.Secret
 	err = r.Get(ctx, client.ObjectKey{
 		Namespace: req.Namespace,
@@ -213,11 +252,7 @@ func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request
 					UID:        oac.UID,
 				}},
 			},
-			StringData: map[string]string{
-				"id":        oac.Spec.ClientID,
-				"secret":    secStr,
-				"issuerURL": fmt.Sprintf("%s/auth/realms/%s", strings.TrimSuffix(prov.Spec.Keycloak.BaseURL, "/"), strings.TrimPrefix(prov.Spec.Keycloak.Realm, "/")),
-			},
+			StringData: data,
 		}
 		err = r.Create(ctx, &sec)
 		if err != nil {
@@ -226,11 +261,7 @@ func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, nil
 	}
 	sec.Data = nil
-	sec.StringData = map[string]string{
-		"id":        oac.Spec.ClientID,
-		"secret":    secStr,
-		"issuerURL": fmt.Sprintf("%s/auth/realms/%s", strings.TrimSuffix(prov.Spec.Keycloak.BaseURL, "/"), strings.TrimPrefix(prov.Spec.Keycloak.Realm, "/")),
-	}
+	sec.StringData = data
 
 	err = r.Update(ctx, &sec)
 	if err != nil {
@@ -241,6 +272,8 @@ func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request
 }
 
 func getOrCreateClient(ctx context.Context, cli gocloak.GoCloak, jwt gocloak.JWT, realm string, c gocloak.Client) (string, string, error) {
+	sp, ctx := opentracing.StartSpanFromContext(ctx, "getOrCreateClient")
+	defer sp.Finish()
 	cl, err := cli.GetClients(ctx, jwt.AccessToken, "master", gocloak.GetClientsParams{
 		ClientID: c.ClientID,
 	})

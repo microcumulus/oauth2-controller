@@ -33,7 +33,8 @@ type OAuth2ClientSpec struct {
 	ClientName string `json:"clientName"`
 
 	// SecretName is the desired secret that should hold the provisioned client's metadata
-	SecretName string `json:"secretName"`
+	SecretName     string            `json:"secretName"`
+	SecretTemplate map[string]string `json:"secretTemplate,omitempty"`
 
 	// Redirects is the list of valid redirects for this Client
 	Redirects []string `json:"redirects"`

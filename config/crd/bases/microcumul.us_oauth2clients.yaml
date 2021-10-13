@@ -58,6 +58,10 @@ spec:
                 description: SecretName is the desired secret that should hold the
                   provisioned client's metadata
                 type: string
+              secretTemplate:
+                additionalProperties:
+                  type: string
+                type: object
             required:
             - clientName
             - redirects

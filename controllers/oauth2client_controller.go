@@ -211,7 +211,6 @@ func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		"issuerURL": fmt.Sprintf("%s/auth/realms/%s", strings.TrimSuffix(prov.Spec.Keycloak.BaseURL, "/"), strings.TrimPrefix(prov.Spec.Keycloak.Realm, "/")),
 	}
 	if oac.Spec.SecretTemplate != nil {
-		data = map[string]string{}
 		for k, tplStr := range oac.Spec.SecretTemplate {
 			lg := lg.WithValues("template", tplStr, "templateKey", k)
 			buf := &bytes.Buffer{}

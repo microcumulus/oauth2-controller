@@ -18,37 +18,37 @@ Example:
 apiVersion: microcumul.us/v1beta1
 kind: ClusterOAuth2ClientProvider
 metadata:
-  name: keycloak
+name: keycloak
 spec:
-  keycloak:
-    baseURL: https://keycloak.example.com
-    realm: master
-    userAuth:
-      username: user # The default set up by bitnami/keycloak
-      passwordRef: # A secret ref to the admin password
-        namespace: auth
-        name: auth-keycloak
-        key: admin-password
+keycloak:
+  baseURL: https://keycloak.example.com
+  realm: master
+  userAuth:
+    username: user # The default set up by bitnami/keycloak
+    passwordRef: # A secret ref to the admin password
+      namespace: auth
+      name: auth-keycloak
+      key: admin-password
 ---
 # A full on oauth2-proxy instance configured against the specified oauth2 provider
 apiVersion: microcumul.us/v1beta1
 kind: OAuth2Proxy
 metadata:
-  name: prom
-  namespace: kube-system
+name: prom
+namespace: kube-system
 spec:
-  clusterClientProvider: keycloak
-  # Currently redis is the only supported session backend for this controller; requires a host and password 
-  sessionStore:
-    redis:
-      host: redis-master.default
-      passwordRef: # An optional reference to a redis password stored in a variable
-        namespace: default
-        name: redis
-        key: redis-password
-  ingress:
-    namespace: kube-system
-    name: prometheus
+clusterClientProvider: keycloak
+# Currently redis is the only supported session backend for this controller; requires a host and password 
+sessionStore:
+  redis:
+    host: redis-master.default
+    passwordRef: # An optional reference to a redis password stored in a variable
+      namespace: default
+      name: redis
+      key: redis-password
+ingress:
+  namespace: kube-system
+  name: prometheus
 ---
 # For clients who support direct integration, this can manage your oidc clients for you
 apiVersion: microcumul.us/v1beta1
@@ -60,9 +60,16 @@ spec:
   clusterProvider: keycloak
   clientName: grafana
   clientID: grafana
-  secretName: grafana-oidc # will have values for id, secret, and issuerURL
   redirects:
     - https://grafana.example.com/*
+  secretName: grafana-oidc # will have values for id, secret, and issuerURL
+  secretTemplate: # Clients can also add key/value pairs whose values will be templated (see example below)
+    example.json: |
+      {
+        "secret": "{{ .ClientSecret }}",
+        "id": "{{ .ClientID }}",
+        "issuer": "{{ .IssuerURL }}"
+      }
 ---
 # An example grafana deployment that uses the above-configured client
 apiVersion: apps/v1
@@ -70,7 +77,7 @@ kind: Deployment
 metadata:
   name: grafana
   namespace: grafana
-spec:
+  spec:
   replicas: 1
   strategy:
     type: RollingUpdate

@@ -306,9 +306,9 @@ func replaceWithOauth2Proxy(ctx context.Context, cs client.Client, ing *networkv
 				"app":  opts.id,
 				"tier": "proxy",
 			},
-			Annotations: map[string]string{
-				"microcumul.us/injectssl": "microcumulus-ca", // TODO: remove
-			},
+			// Annotations: map[string]string{
+			// 	"microcumul.us/injectssl": "microcumulus-ca", // TODO: remove
+			// },
 			OwnerReferences: []metav1.OwnerReference{{
 				APIVersion: spec.APIVersion,
 				Kind:       spec.Kind,

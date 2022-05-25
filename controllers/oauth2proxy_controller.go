@@ -127,6 +127,9 @@ func (r *OAuth2ProxyReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	err = r.Get(ctx, req.NamespacedName, &sec)
 	if err != nil {
 		var uris []string
+		if len(ing.Spec.Rules) > 0 {
+			uris = append(uris, fmt.Sprintf("https://%s/", ing.Spec.Rules[0].Host))
+		}
 		for _, rule := range ing.Spec.Rules {
 			uris = append(uris, fmt.Sprintf("https://%s/*", rule.Host))
 		}

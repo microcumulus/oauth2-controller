@@ -36,7 +36,10 @@ import (
 	microcumulusv1beta1 "github.com/microcumulus/oauth2-controller/api/v1beta1"
 )
 
-const finalizerStringClient = "microcumul.us/oauthclient-controller"
+const (
+	finalizerStringClient = "microcumul.us/oauthclient-controller"
+	annotationForeignID   = "microcumul.us/idp-client-uid"
+)
 
 // OAuth2ClientReconciler reconciles a OAuth2Client object
 type OAuth2ClientReconciler struct {
@@ -105,7 +108,7 @@ func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, fmt.Errorf("error getting provider: %w", err)
 	}
 
-	// TODO: abstract this into a provider interface
+	// Create the keycloak client from the current provider spec
 	cloak := gocloak.NewClient(prov.Spec.Keycloak.BaseURL)
 	var jwt *gocloak.JWT
 	switch {
@@ -133,15 +136,31 @@ func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		}
 	}
 
+	var sec corev1.Secret
+	err = r.Get(ctx, client.ObjectKey{
+		Namespace: req.Namespace,
+		Name:      oac.Spec.SecretName,
+	}, &sec)
+	if err != nil {
+		lg.Error(err, "could not find existing secret")
+	} else {
+		if uid := sec.Annotations[annotationForeignID]; uid != "" {
+			existCli, err := cloak.GetClient(ctx, jwt.AccessToken, prov.Spec.Keycloak.Realm, uid)
+			if err == nil && *existCli.Name == oac.Spec.ClientID {
+				return ctrl.Result{}, nil
+			}
+		}
+	}
+
 	oac.Spec.ClientID = first(oac.Spec.ClientID, oac.Spec.ClientName)
 
-	// Handling delete
+	// Handle deletion of the oauth2 client custom resource by removing it from keycloak
 	if !oac.ObjectMeta.DeletionTimestamp.IsZero() {
 		if !containsString(oac.Finalizers, finalizerStringClient) {
 			return res, nil
 		}
 
-		cls, err := cloak.GetClients(ctx, jwt.AccessToken, "master", gocloak.GetClientsParams{
+		cls, err := cloak.GetClients(ctx, jwt.AccessToken, prov.Spec.Keycloak.Realm, gocloak.GetClientsParams{
 			ClientID: &oac.Spec.ClientID,
 		})
 		if err != nil {
@@ -200,14 +219,14 @@ func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		ProtocolMappers:         &mappers,
 	}
 
-	_, secStr, err := getOrCreateClient(ctx, cloak, *jwt, prov.Spec.Keycloak.Realm, cli)
+	newCli, err := getOrCreateClient(ctx, cloak, *jwt, prov.Spec.Keycloak.Realm, cli)
 	if err != nil && !strings.Contains(err.Error(), "exists") {
 		return ctrl.Result{}, fmt.Errorf("error creating new client: %w", err)
 	}
 
 	data := map[string]string{
 		"id":        oac.Spec.ClientID,
-		"secret":    secStr,
+		"secret":    newCli.secret,
 		"issuerURL": fmt.Sprintf("%s/auth/realms/%s", strings.TrimSuffix(prov.Spec.Keycloak.BaseURL, "/"), strings.TrimPrefix(prov.Spec.Keycloak.Realm, "/")),
 	}
 	if oac.Spec.SecretTemplate != nil {
@@ -222,7 +241,7 @@ func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 			err = tpl.Execute(buf, map[string]interface{}{
 				"ClientID":     oac.Spec.ClientID,
-				"ClientSecret": secStr,
+				"ClientSecret": newCli.secret,
 				"IssuerURL":    fmt.Sprintf("%s/auth/realms/%s", strings.TrimSuffix(prov.Spec.Keycloak.BaseURL, "/"), strings.TrimPrefix(prov.Spec.Keycloak.Realm, "/")),
 			})
 			if err != nil {
@@ -234,7 +253,7 @@ func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		}
 	}
 
-	var sec corev1.Secret
+	// TODO: maybe merge this with the above secret GET since it's the same.
 	err = r.Get(ctx, client.ObjectKey{
 		Namespace: req.Namespace,
 		Name:      oac.Spec.SecretName,
@@ -250,6 +269,9 @@ func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request
 					Name:       oac.Name,
 					UID:        oac.UID,
 				}},
+				Annotations: map[string]string{
+					annotationForeignID: newCli.uid,
+				},
 			},
 			StringData: data,
 		}
@@ -261,6 +283,7 @@ func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 	sec.Data = nil
 	sec.StringData = data
+	sec.Annotations[annotationForeignID] = newCli.uid
 
 	err = r.Update(ctx, &sec)
 	if err != nil {
@@ -270,37 +293,42 @@ func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	return ctrl.Result{}, nil
 }
 
-func getOrCreateClient(ctx context.Context, cli gocloak.GoCloak, jwt gocloak.JWT, realm string, c gocloak.Client) (string, string, error) {
+// Holds response data out of the oauth IDP
+type clientData struct {
+	uid, id, secret string
+}
+
+func getOrCreateClient(ctx context.Context, cli gocloak.GoCloak, jwt gocloak.JWT, realm string, c gocloak.Client) (*clientData, error) {
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "getOrCreateClient")
 	defer sp.Finish()
-	cl, err := cli.GetClients(ctx, jwt.AccessToken, "master", gocloak.GetClientsParams{
+	cl, err := cli.GetClients(ctx, jwt.AccessToken, realm, gocloak.GetClientsParams{
 		ClientID: c.ClientID,
 	})
 	if err == nil && len(cl) == 1 {
-		cred, err := cli.GetClientSecret(ctx, jwt.AccessToken, "master", *cl[0].ID)
+		cred, err := cli.GetClientSecret(ctx, jwt.AccessToken, realm, *cl[0].ID)
 		if err != nil {
-			return "", "", fmt.Errorf("couldn't get client secret: %w", err)
+			return nil, fmt.Errorf("couldn't get client secret: %w", err)
 		}
 		if cred.Value != nil && *cred.Value != "" {
-			return *cl[0].ClientID, *cred.Value, nil
+			return &clientData{uid: *cl[0].ID, id: *cl[0].ClientID, secret: *cred.Value}, nil
 		}
 	}
 
 	id, err := cli.CreateClient(ctx, jwt.AccessToken, realm, c)
 	if err != nil {
-		return "", "", fmt.Errorf("couldn't create client: %w", err)
+		return nil, fmt.Errorf("couldn't create client: %w", err)
 	}
 
 	cred, err := cli.RegenerateClientSecret(ctx, jwt.AccessToken, realm, id)
 	if err != nil {
-		return "", "", fmt.Errorf("error regenerating secret: %w", err)
+		return nil, fmt.Errorf("error regenerating secret: %w", err)
 	}
 
 	if cred.Value == nil {
-		return "", "", fmt.Errorf("regenerated secret had a nil value somehow: %v", cred)
+		return nil, fmt.Errorf("regenerated secret had a nil value somehow: %v", cred)
 	}
 
-	return id, *cred.Value, nil
+	return &clientData{id: id, secret: *cred.Value}, nil
 }
 
 func getSecretVal(ctx context.Context, r client.Client, ns string, sel *corev1.SecretKeySelector) (string, error) {

@@ -33,7 +33,7 @@ func getKeycloakIngress(ctx context.Context, cs IngressLister, ingPrefix string)
 
 // GetGoCloakClient can return a gocloak "client" (gocloak.GoCloak) based on
 // the keycloak installation provided by the bitnami keycloak
-func GetGoCloakClient(ctx context.Context, cs SecureStackCreator, ns, chartName, ingPrefix string) (gocloak.GoCloak, *gocloak.JWT, string, error) {
+func GetGoCloakClient(ctx context.Context, cs SecureStackCreator, ns, chartName, ingPrefix, realm string) (gocloak.GoCloak, *gocloak.JWT, string, error) {
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "GetGoCloakClient")
 	defer sp.Finish()
 
@@ -49,7 +49,7 @@ func GetGoCloakClient(ctx context.Context, cs SecureStackCreator, ns, chartName,
 	}
 
 	cli := gocloak.NewClient(host)
-	jwt, err := cli.LoginAdmin(ctx, "user", pass, "master")
+	jwt, err := cli.LoginAdmin(ctx, "user", pass, realm)
 	if err != nil {
 		return nil, nil, "", fmt.Errorf("couldn't login: %w", err)
 	}

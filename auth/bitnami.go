@@ -20,7 +20,7 @@ func (bh *BitnamiHelmKCCreator) CreateOIDCClient(ctx context.Context, c *gocloak
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "BitnamiHelmKCCreator.CreateOIDCClient")
 	defer sp.Finish()
 
-	cli, jwt, host, err := GetGoCloakClient(ctx, bh.Kube, bh.Namespace, bh.Name, bh.IngressPrefix)
+	cli, jwt, host, err := GetGoCloakClient(ctx, bh.Kube, bh.Namespace, bh.Name, bh.IngressPrefix, bh.Realm)
 	if err != nil {
 		return nil, fmt.Errorf("error getting client: %w", err)
 	}

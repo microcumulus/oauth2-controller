@@ -147,6 +147,7 @@ func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		if uid := sec.Annotations[annotationForeignID]; uid != "" {
 			existCli, err := cloak.GetClient(ctx, jwt.AccessToken, prov.Spec.Keycloak.Realm, uid)
 			if err == nil && *existCli.Name == oac.Spec.ClientID {
+				lg.WithValues("client", oac.TypeMeta.String(), "uid", sec.Annotations[annotationForeignID]).Info("not recreating secret for matching uid")
 				return ctrl.Result{}, nil
 			}
 		}

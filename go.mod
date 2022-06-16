@@ -3,6 +3,7 @@ module github.com/microcumulus/oauth2-controller
 go 1.13
 
 require (
+	github.com/Nerzal/gocloak/v11 v11.2.0
 	github.com/Nerzal/gocloak/v8 v8.5.0
 	github.com/go-logr/logr v0.4.0
 	github.com/google/uuid v1.2.0 // indirect

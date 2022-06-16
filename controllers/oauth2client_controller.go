@@ -23,7 +23,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/Nerzal/gocloak/v8"
+	"github.com/Nerzal/gocloak/v11"
 	"github.com/go-logr/logr"
 	"github.com/opentracing/opentracing-go"
 	corev1 "k8s.io/api/core/v1"
@@ -85,7 +85,6 @@ func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		lg.V(1).Info("added finalizer; requeuing")
 		return ctrl.Result{Requeue: true}, err
 	}
-	lg.V(1).Info("got req with finalizer")
 
 	var prov v1beta1.ClusterOAuth2ClientProvider
 	err = r.Get(ctx, client.ObjectKey{
@@ -157,6 +156,7 @@ func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 	// Handle deletion of the oauth2 client custom resource by removing it from keycloak
 	if !oac.ObjectMeta.DeletionTimestamp.IsZero() {
+		lg.WithValues("client", oac.TypeMeta.String()).Info("deleting")
 		if !containsString(oac.Finalizers, finalizerStringClient) {
 			return res, nil
 		}
@@ -228,7 +228,7 @@ func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	data := map[string]string{
 		"id":        oac.Spec.ClientID,
 		"secret":    newCli.secret,
-		"issuerURL": fmt.Sprintf("%s/auth/realms/%s", strings.TrimSuffix(prov.Spec.Keycloak.BaseURL, "/"), strings.TrimPrefix(prov.Spec.Keycloak.Realm, "/")),
+		"issuerURL": fmt.Sprintf("%s/realms/%s", strings.TrimSuffix(prov.Spec.Keycloak.BaseURL, "/"), strings.TrimPrefix(prov.Spec.Keycloak.Realm, "/")),
 	}
 	if oac.Spec.SecretTemplate != nil {
 		for k, tplStr := range oac.Spec.SecretTemplate {
@@ -243,7 +243,7 @@ func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			err = tpl.Execute(buf, map[string]interface{}{
 				"ClientID":     oac.Spec.ClientID,
 				"ClientSecret": newCli.secret,
-				"IssuerURL":    fmt.Sprintf("%s/auth/realms/%s", strings.TrimSuffix(prov.Spec.Keycloak.BaseURL, "/"), strings.TrimPrefix(prov.Spec.Keycloak.Realm, "/")),
+				"IssuerURL":    fmt.Sprintf("%s/realms/%s", strings.TrimSuffix(prov.Spec.Keycloak.BaseURL, "/"), strings.TrimPrefix(prov.Spec.Keycloak.Realm, "/")),
 			})
 			if err != nil {
 				lg.Error(err, "error while executing template")
@@ -284,6 +284,9 @@ func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 	sec.Data = nil
 	sec.StringData = data
+	if sec.Annotations == nil {
+		sec.Annotations = map[string]string{}
+	}
 	sec.Annotations[annotationForeignID] = newCli.uid
 
 	err = r.Update(ctx, &sec)

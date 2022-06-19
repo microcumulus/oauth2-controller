@@ -108,7 +108,7 @@ func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	// Create the keycloak client from the current provider spec
-	cloak := gocloak.NewClient(prov.Spec.Keycloak.BaseURL)
+	cloak := gocloak.NewClient(prov.Spec.Keycloak.BaseURL, gocloak.SetAuthAdminRealms("admin/realms"), gocloak.SetAuthRealms("realms"))
 	var jwt *gocloak.JWT
 	switch {
 	case prov.Spec.Keycloak.UserAuth != nil:
@@ -132,23 +132,6 @@ func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		jwt, err = cloak.LoginClient(ctx, ca.ClientID, sec, prov.Spec.Keycloak.Realm)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("error logging in as admin service account (%s): %w", ca.ClientID, err)
-		}
-	}
-
-	var sec corev1.Secret
-	err = r.Get(ctx, client.ObjectKey{
-		Namespace: req.Namespace,
-		Name:      oac.Spec.SecretName,
-	}, &sec)
-	if err != nil {
-		lg.Error(err, "could not find existing secret")
-	} else {
-		if uid := sec.Annotations[annotationForeignID]; uid != "" {
-			existCli, err := cloak.GetClient(ctx, jwt.AccessToken, prov.Spec.Keycloak.Realm, uid)
-			if err == nil && *existCli.Name == oac.Spec.ClientID {
-				lg.WithValues("client", oac.TypeMeta.String(), "uid", sec.Annotations[annotationForeignID]).Info("not recreating secret for matching uid")
-				return ctrl.Result{}, nil
-			}
 		}
 	}
 
@@ -186,6 +169,23 @@ func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			return ctrl.Result{}, fmt.Errorf("error removing finalizer: %w", err)
 		}
 		return ctrl.Result{}, nil
+	}
+
+	var sec corev1.Secret
+	err = r.Get(ctx, client.ObjectKey{
+		Namespace: req.Namespace,
+		Name:      oac.Spec.SecretName,
+	}, &sec)
+	if err != nil {
+		lg.Error(err, "could not find existing secret")
+	} else {
+		if uid := sec.Annotations[annotationForeignID]; uid != "" {
+			existCli, err := cloak.GetClient(ctx, jwt.AccessToken, prov.Spec.Keycloak.Realm, uid)
+			if err == nil && *existCli.Name == oac.Spec.ClientID {
+				lg.WithValues("client", oac.TypeMeta.String(), "uid", sec.Annotations[annotationForeignID]).Info("not recreating secret for matching uid")
+				return ctrl.Result{}, nil
+			}
+		}
 	}
 
 	var mappers []gocloak.ProtocolMapperRepresentation

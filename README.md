@@ -12,6 +12,14 @@ keycloak instance (assuming that the admin password is available in a secret as
 created by the
 [bitnami/keycloak](https://github.com/bitnami/charts/tree/master/bitnami/keycloak/#installing-the-chart) helm chart).
 
+Features:
+- Automate setup of OAuth2 clients
+- Automate setup of OAuth2Proxy, including the oauth client.
+- Watches ingresses it manages, so that CI/CD can simply apply ingress specs and
+    the proxy specs separately. This also means ingress rule changes will
+    propagate to the oauth2-proxy podspec.
+- Cleanup resources, including remote oauth2 clients
+
 Example:
 
 ```yaml

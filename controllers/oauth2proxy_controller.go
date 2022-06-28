@@ -37,6 +37,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	microcumulusv1beta1 "github.com/microcumulus/oauth2-controller/api/v1beta1"
 )
@@ -179,7 +180,12 @@ func (r *OAuth2ProxyReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, fmt.Errorf("couldn't get jwt group claim key from provider: %w", err)
 	}
 
-	err = replaceWithOauth2Proxy(ctx, r.Client, &ing, spec, oa2ProxyOpts{
+	r.Log.Info("setting controller reference")
+	err = controllerutil.SetControllerReference(&spec, &ing, r.Scheme)
+	if err != nil {
+		r.Log.Error(err, "error setting controller reference")
+	}
+	err = r.replaceWithOauth2Proxy(ctx, &ing, spec, oa2ProxyOpts{
 		id:         string(sec.Data["id"]),
 		secret:     string(sec.Data["secret"]),
 		issuerURL:  string(sec.Data["issuerURL"]),
@@ -189,10 +195,11 @@ func (r *OAuth2ProxyReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		groups:     spec.Spec.AllowedGroups,
 		optsMap:    spec.Spec.ProxyOpts,
 	})
+
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("error replacing ingress with proxy: %w", err)
 	}
-	return ctrl.Result{}, nil
+	return ctrl.Result{}, err
 }
 
 func (r *OAuth2ProxyReconciler) getGroupClaim(ctx context.Context, spec microcumulusv1beta1.OAuth2Proxy) (string, error) {
@@ -245,7 +252,7 @@ type oa2ProxyOpts struct {
 	optsMap    map[string]string
 }
 
-func replaceWithOauth2Proxy(ctx context.Context, cs client.Client, ing *networkv1.Ingress, spec microcumulusv1beta1.OAuth2Proxy, opts oa2ProxyOpts) error {
+func (r *OAuth2ProxyReconciler) replaceWithOauth2Proxy(ctx context.Context, ing *networkv1.Ingress, spec microcumulusv1beta1.OAuth2Proxy, opts oa2ProxyOpts) error {
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "replaceWithOauth2Proxy")
 	defer sp.Finish()
 
@@ -254,12 +261,16 @@ func replaceWithOauth2Proxy(ctx context.Context, cs client.Client, ing *networkv
 
 	updatedIng := ing.DeepCopy()
 
-	updatedIng.OwnerReferences = append(updatedIng.OwnerReferences, metav1.OwnerReference{
-		APIVersion: spec.APIVersion,
-		Kind:       spec.Kind,
-		Name:       spec.Name,
-		UID:        spec.UID,
-	})
+	if _, ok := lo.Find(updatedIng.OwnerReferences, func(ref metav1.OwnerReference) bool {
+		return spec.UID == ref.UID
+	}); !ok {
+		updatedIng.OwnerReferences = append(updatedIng.OwnerReferences, metav1.OwnerReference{
+			APIVersion: spec.APIVersion,
+			Kind:       spec.Kind,
+			Name:       spec.Name,
+			UID:        spec.UID,
+		})
+	}
 
 	if ing.Annotations[annotPreviousRules] == "" {
 		oldRules, _ := json.Marshal(ing.Spec.Rules)
@@ -299,7 +310,7 @@ func replaceWithOauth2Proxy(ctx context.Context, cs client.Client, ing *networkv
 
 		proxName := fmt.Sprintf("oauth2-proxy-%s-%s", opts.id, be.Service.Name)
 
-		err := cs.Create(ctx, &corev1.Secret{
+		err := r.Create(ctx, &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      proxName,
 				Namespace: ing.Namespace,
@@ -358,7 +369,7 @@ func replaceWithOauth2Proxy(ctx context.Context, cs client.Client, ing *networkv
 				},
 			},
 		}
-		err = cs.Create(ctx, &appsv1.Deployment{
+		err = r.Create(ctx, &appsv1.Deployment{
 			ObjectMeta: om,
 			Spec: appsv1.DeploymentSpec{
 				Replicas: &one32,
@@ -405,7 +416,7 @@ func replaceWithOauth2Proxy(ctx context.Context, cs client.Client, ing *networkv
 			return fmt.Errorf("error creating deployment: %w", err)
 		}
 
-		err = cs.Create(ctx, &corev1.Service{
+		err = r.Create(ctx, &corev1.Service{
 			ObjectMeta: om,
 			Spec: corev1.ServiceSpec{
 				Type:     corev1.ServiceTypeClusterIP,
@@ -434,7 +445,7 @@ func replaceWithOauth2Proxy(ctx context.Context, cs client.Client, ing *networkv
 		}
 	}
 
-	err := cs.Update(ctx, updatedIng)
+	err := r.Update(ctx, updatedIng)
 	if err != nil && !strings.Contains(err.Error(), "exists") {
 		return fmt.Errorf("error updating ingress: %w", err)
 	}

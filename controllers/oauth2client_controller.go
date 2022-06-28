@@ -70,8 +70,8 @@ func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	var oac v1beta1.OAuth2Client
 	err = r.Get(ctx, req.NamespacedName, &oac)
 	if err != nil {
+		lg.Error(err, "could not get oauth2client definition")
 		if strings.Contains(err.Error(), "not found") {
-			lg.Info("done deleting client customresource")
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, fmt.Errorf("couldn't get client body: %w", err)

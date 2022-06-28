@@ -27,6 +27,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/opentracing/opentracing-go"
+	"github.com/samber/lo"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkv1 "k8s.io/api/networking/v1"
@@ -42,7 +43,10 @@ import (
 )
 
 const (
-	annotPreviousRules  = "microcumul.us/previous-rules"
+	// Storage of the previous ingress spec rules in the annotations are under this key.
+	annotPreviousRules = "microcumul.us/previous-rules"
+	// Annotation specifying that the ingress was created by the oauth2 proxy.
+	annotCreatedBy      = "microcumul.us/ingress-created"
 	finalizerStringProx = "microcumul.us/proxy-controller"
 )
 
@@ -214,6 +218,11 @@ func (r *OAuth2ProxyReconciler) handleDelete(ctx context.Context, spec microcumu
 		}
 		revertedIng.Spec.Rules = oldRules
 		delete(revertedIng.Annotations, annotPreviousRules)
+
+		// Ensure no deletion of ingress directly by the controller.
+		revertedIng.OwnerReferences = lo.Filter(revertedIng.OwnerReferences, func(ref metav1.OwnerReference, _ int) bool {
+			return ref.UID != spec.UID
+		})
 
 		err = r.Update(ctx, revertedIng)
 		if err != nil {

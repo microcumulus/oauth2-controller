@@ -180,11 +180,6 @@ func (r *OAuth2ProxyReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, fmt.Errorf("couldn't get jwt group claim key from provider: %w", err)
 	}
 
-	r.Log.Info("setting controller reference")
-	err = controllerutil.SetControllerReference(&spec, &ing, r.Scheme)
-	if err != nil {
-		r.Log.Error(err, "error setting controller reference")
-	}
 	err = r.replaceWithOauth2Proxy(ctx, &ing, spec, oa2ProxyOpts{
 		id:         string(sec.Data["id"]),
 		secret:     string(sec.Data["secret"]),
@@ -261,15 +256,10 @@ func (r *OAuth2ProxyReconciler) replaceWithOauth2Proxy(ctx context.Context, ing 
 
 	updatedIng := ing.DeepCopy()
 
-	if _, ok := lo.Find(updatedIng.OwnerReferences, func(ref metav1.OwnerReference) bool {
-		return spec.UID == ref.UID
-	}); !ok {
-		updatedIng.OwnerReferences = append(updatedIng.OwnerReferences, metav1.OwnerReference{
-			APIVersion: spec.APIVersion,
-			Kind:       spec.Kind,
-			Name:       spec.Name,
-			UID:        spec.UID,
-		})
+	r.Log.Info("setting controller reference")
+	err := controllerutil.SetControllerReference(&spec, updatedIng, r.Scheme)
+	if err != nil {
+		r.Log.Error(err, "error setting controller reference")
 	}
 
 	if ing.Annotations[annotPreviousRules] == "" {
@@ -445,7 +435,7 @@ func (r *OAuth2ProxyReconciler) replaceWithOauth2Proxy(ctx context.Context, ing 
 		}
 	}
 
-	err := r.Update(ctx, updatedIng)
+	err = r.Update(ctx, updatedIng)
 	if err != nil && !strings.Contains(err.Error(), "exists") {
 		return fmt.Errorf("error updating ingress: %w", err)
 	}

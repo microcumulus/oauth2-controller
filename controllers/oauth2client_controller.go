@@ -177,7 +177,7 @@ func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		Name:      oac.Spec.SecretName,
 	}, &sec)
 	if err != nil {
-		lg.Error(err, "could not find existing secret")
+		lg.Info("could not find existing secret", "error", err, "name", req.NamespacedName.String())
 	} else {
 		if uid := sec.Annotations[annotationForeignID]; uid != "" {
 			existCli, err := cloak.GetClient(ctx, jwt.AccessToken, prov.Spec.Keycloak.Realm, uid)

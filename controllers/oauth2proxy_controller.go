@@ -27,6 +27,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/opentracing/opentracing-go"
+	"github.com/samber/lo"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkv1 "k8s.io/api/networking/v1"
@@ -55,12 +56,13 @@ type OAuth2ProxyReconciler struct {
 func (r *OAuth2ProxyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&microcumulusv1beta1.OAuth2Proxy{}).
+		Owns(&networkv1.Ingress{}).
 		Complete(r)
 }
 
 // +kubebuilder:rbac:groups=microcumul.us,resources=oauth2proxies,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=microcumul.us,resources=oauth2proxies/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses,verbs=get;update;patch;create;delete;list;watch
+// +kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses,verbs=watch;get;update;patch;create;delete;list;watch
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;update;patch;create;delete;list;watch
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;update;patch;create;delete;list;watch
 
@@ -157,7 +159,7 @@ func (r *OAuth2ProxyReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 				Redirects:       uris,
 			},
 		})
-		if err != nil {
+		if err != nil && !strings.Contains(err.Error(), "already exists") {
 			return ctrl.Result{}, fmt.Errorf("no secret data present, and could not create OAuth2Client object: %w", err)
 		}
 		// Now requeue so the secret is created
@@ -211,6 +213,11 @@ func (r *OAuth2ProxyReconciler) handleDelete(ctx context.Context, spec microcumu
 		}
 		revertedIng.Spec.Rules = oldRules
 		delete(revertedIng.Annotations, annotPreviousRules)
+
+		revertedIng.OwnerReferences = lo.Filter(revertedIng.OwnerReferences, func(ref metav1.OwnerReference, _ int) bool {
+			return ref.UID != spec.UID
+		})
+
 		err = r.Update(ctx, revertedIng)
 		if err != nil {
 			return ctrl.Result{Requeue: false}, fmt.Errorf("error reverting ingress: %w", err)
@@ -246,6 +253,13 @@ func replaceWithOauth2Proxy(ctx context.Context, cs client.Client, ing *networkv
 	rand.Read(bs)
 
 	updatedIng := ing.DeepCopy()
+
+	updatedIng.OwnerReferences = append(updatedIng.OwnerReferences, metav1.OwnerReference{
+		APIVersion: spec.APIVersion,
+		Kind:       spec.Kind,
+		Name:       spec.Name,
+		UID:        spec.UID,
+	})
 
 	if ing.Annotations[annotPreviousRules] == "" {
 		oldRules, _ := json.Marshal(ing.Spec.Rules)
@@ -364,6 +378,9 @@ func replaceWithOauth2Proxy(ctx context.Context, cs client.Client, ing *networkv
 								"--provider=oidc",
 								"--provider-display-name=Keycloak",
 								"--http-address=0.0.0.0:4180",
+								"--cookie-refresh=1m",
+								"--pass-access-token",
+								"--pass-authorization-header",
 								"--email-domain=*",
 								"--session-store-type=redis",
 								"--cookie-secure=true",

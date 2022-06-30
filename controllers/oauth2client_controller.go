@@ -26,6 +26,7 @@ import (
 	"github.com/Nerzal/gocloak/v11"
 	"github.com/go-logr/logr"
 	"github.com/opentracing/opentracing-go"
+	"go.uber.org/multierr"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -48,25 +49,34 @@ type OAuth2ClientReconciler struct {
 	Scheme *runtime.Scheme
 }
 
+func (r *OAuth2ClientReconciler) delete(ctx context.Context, oac v1beta1.OAuth2Client) error {
+	oac2 := oac.DeepCopy()
+	oac2.Finalizers = removeString(oac2.Finalizers, finalizerStringClient)
+	err := r.Update(ctx, oac2)
+	if err != nil {
+		return fmt.Errorf("error removing finalizer: %w", err)
+	}
+	return nil
+}
+
 // +kubebuilder:rbac:groups=microcumul.us,resources=oauth2clients,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=microcumul.us,resources=oauth2clients/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;update;delete;create;patch;watch
 
 func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res ctrl.Result, err error) {
-	defer func() {
-		if err := recover(); err != nil {
-			r.Log.WithValues("recovered", err).Info("recovered from panic")
-		}
-	}()
 	lg := r.Log.WithValues("oauth2client", req.NamespacedName)
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "OAuth2ClientReconciler.Reconcile")
-	defer sp.Finish()
 	defer func() {
 		if err != nil {
-			sp.SetTag("error", true)
-			sp.LogKV("error", err)
+			sp.SetTag("error", true).LogKV("error", err)
 		}
+		if recErr := recover(); recErr != nil {
+			sp.SetTag("error", true).LogKV("recovered", recErr)
+			lg.WithValues("recovered", recErr).Info("recovered from panic")
+		}
+		sp.Finish()
 	}()
+
 	var oac v1beta1.OAuth2Client
 	err = r.Get(ctx, req.NamespacedName, &oac)
 	if err != nil {
@@ -77,8 +87,11 @@ func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, fmt.Errorf("couldn't get client body: %w", err)
 	}
 
-	// add finalizer string
-	if oac.DeletionTimestamp.IsZero() && !containsString(oac.Finalizers, finalizerStringClient) {
+	if !oac.ObjectMeta.DeletionTimestamp.IsZero() {
+		defer func() {
+			err = multierr.Append(err, r.delete(ctx, oac))
+		}()
+	} else if !containsString(oac.Finalizers, finalizerStringClient) {
 		withFinal := oac.DeepCopy()
 		withFinal.Finalizers = append(withFinal.Finalizers, finalizerStringClient)
 		err = r.Update(ctx, withFinal)
@@ -162,13 +175,7 @@ func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			}
 		}
 
-		oac2 := oac.DeepCopy()
-		oac2.Finalizers = removeString(oac2.Finalizers, finalizerStringClient)
-		err = r.Update(ctx, oac2)
-		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("error removing finalizer: %w", err)
-		}
-		return ctrl.Result{}, nil
+		return ctrl.Result{}, r.delete(ctx, oac)
 	}
 
 	var sec corev1.Secret

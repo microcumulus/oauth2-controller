@@ -10,6 +10,7 @@ require (
 	github.com/onsi/gomega v1.14.0
 	github.com/opentracing/opentracing-go v1.2.0
 	github.com/samber/lo v1.21.0
+	go.uber.org/multierr v1.6.0
 	k8s.io/api v0.21.3
 	k8s.io/apimachinery v0.21.3
 	k8s.io/client-go v0.21.3
@@ -49,7 +50,6 @@ require (
 	github.com/segmentio/ksuid v1.0.4 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	go.uber.org/atomic v1.7.0 // indirect
-	go.uber.org/multierr v1.6.0 // indirect
 	go.uber.org/zap v1.18.1 // indirect
 	golang.org/x/exp v0.0.0-20220303212507-bbda1eaf7a17 // indirect
 	golang.org/x/net v0.0.0-20220425223048-2871e0cb64e4 // indirect

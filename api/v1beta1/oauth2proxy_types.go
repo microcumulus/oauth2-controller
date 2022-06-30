@@ -78,6 +78,7 @@ type OAuth2ProxyStatus struct {
 }
 
 // +kubebuilder:object:root=true
+// +kubebuilder:printcolumn:name="Ingress",type=string,JSONPath=`.spec.ingress.name`
 
 // OAuth2Proxy is the Schema for the oauth2proxies API
 type OAuth2Proxy struct {

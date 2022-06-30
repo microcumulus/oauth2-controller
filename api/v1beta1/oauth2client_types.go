@@ -60,6 +60,8 @@ type OAuth2Client struct {
 }
 
 // +kubebuilder:object:root=true
+// +kubebuilder:printcolumn:name="ClientName",type=string,JSONPath=`.spec.clientName`
+// +kubebuilder:printcolumn:name="SecretName",type=string,JSONPath=`.spec.secretName`
 
 // OAuth2ClientList contains a list of OAuth2Client
 type OAuth2ClientList struct {

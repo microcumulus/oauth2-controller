@@ -15,7 +15,11 @@ spec:
     singular: oauth2proxy
   scope: Namespaced
   versions:
-  - name: v1beta1
+  - additionalPrinterColumns:
+    - jsonPath: .spec.ingress.name
+      name: Ingress
+      type: string
+    name: v1beta1
     schema:
       openAPIV3Schema:
         description: OAuth2Proxy is the Schema for the oauth2proxies API
@@ -269,3 +273,4 @@ spec:
         type: object
     served: true
     storage: true
+    subresources: {}

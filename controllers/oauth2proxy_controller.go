@@ -128,6 +128,7 @@ func (r *OAuth2ProxyReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// 		}
 	// 		svcs.Items = []corev1.Service{svc}
 	// }
+
 	// Check for oidc secrets values; create if not exist
 	var sec corev1.Secret
 	err = r.Get(ctx, req.NamespacedName, &sec)
@@ -255,9 +256,6 @@ func (r *OAuth2ProxyReconciler) replaceWithOauth2Proxy(ctx context.Context, ing 
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "replaceWithOauth2Proxy")
 	defer sp.Finish()
 
-	bs := make([]byte, 16)
-	rand.Read(bs)
-
 	updatedIng := ing.DeepCopy()
 
 	r.Log.Info("setting controller reference")
@@ -270,7 +268,7 @@ func (r *OAuth2ProxyReconciler) replaceWithOauth2Proxy(ctx context.Context, ing 
 		oldRules, _ := json.Marshal(ing.Spec.Rules)
 		updatedIng.Annotations[annotPreviousRules] = string(oldRules)
 	} else {
-		// If there are old rules already, make sure we use those for the rest of the setup
+		// If there are old rules already, make sure we start with those for the rest of the setup
 		err := json.Unmarshal([]byte(ing.Annotations[annotPreviousRules]), &updatedIng.Spec.Rules)
 		if err != nil {
 			return fmt.Errorf("error grabbing old rules: %w", err)
@@ -278,9 +276,14 @@ func (r *OAuth2ProxyReconciler) replaceWithOauth2Proxy(ctx context.Context, ing 
 	}
 
 	for i, rule := range updatedIng.Spec.Rules {
-		be := rule.HTTP.Paths[0].Backend
+		be := rule.HTTP.Paths[0].Backend // TODO: This won't work well for path-specific backend routing :ohno:
+		upstream := fmt.Sprintf("http://%s:%d", be.Service.Name, be.Service.Port.Number)
+
+		bs := make([]byte, 16)
+		rand.Read(bs)
+
 		m := map[string]string{
-			"UPSTREAM":        fmt.Sprintf("http://%s:%d", be.Service.Name, be.Service.Port.Number),
+			"UPSTREAM":        upstream,
 			"OIDC_ISSUER_URL": opts.issuerURL,
 			"CLIENT_ID":       opts.id,
 			"CLIENT_SECRET":   opts.secret,
@@ -304,33 +307,46 @@ func (r *OAuth2ProxyReconciler) replaceWithOauth2Proxy(ctx context.Context, ing 
 
 		proxName := fmt.Sprintf("oauth2-proxy-%s-%s", opts.id, be.Service.Name)
 
-		err := r.Create(ctx, &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      proxName,
-				Namespace: ing.Namespace,
-				OwnerReferences: []metav1.OwnerReference{{
-					APIVersion: spec.APIVersion,
-					Kind:       spec.Kind,
-					Name:       spec.Name,
-					UID:        spec.UID,
-				}},
-			},
-			StringData: m,
-		})
-		if err != nil && !strings.Contains(err.Error(), "exists") {
-			return fmt.Errorf("error creating secret: %w", err)
+		// Create or update secret
+		var sec corev1.Secret
+		err = r.Get(ctx, client.ObjectKey{Namespace: ing.Namespace, Name: proxName}, &sec)
+		if err != nil && strings.Contains(err.Error(), "not found") {
+			r.Log.Info("secret not found; creating")
+			err = r.Create(ctx, &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      proxName,
+					Namespace: ing.Namespace,
+					OwnerReferences: []metav1.OwnerReference{{
+						APIVersion: spec.APIVersion,
+						Kind:       spec.Kind,
+						Name:       spec.Name,
+						UID:        spec.UID,
+					}},
+				},
+				StringData: m,
+			})
+		} else {
+			sec := sec.DeepCopy()
+			// Don't mess with the cookie secret
+			m["COOKIE_SECRET"] = string(sec.Data["COOKIE_SECRET"])
+			r.Log.Info("proxy container secret found; updating", "secret", m)
+			sec.StringData = m
+			err = r.Update(ctx, sec)
+		}
+
+		if err != nil {
+			if !strings.Contains(err.Error(), "exists") {
+				return fmt.Errorf("error creating secret: %w", err)
+			}
+
 		}
 
 		om := metav1.ObjectMeta{
 			Name:      proxName,
 			Namespace: ing.Namespace,
 			Labels: map[string]string{
-				"app":  opts.id,
-				"tier": "proxy",
+				"proxyapp": opts.id,
 			},
-			// Annotations: map[string]string{
-			// 	"microcumul.us/injectssl": "microcumulus-ca", // TODO: remove
-			// },
 			OwnerReferences: []metav1.OwnerReference{{
 				APIVersion: spec.APIVersion,
 				Kind:       spec.Kind,
@@ -363,48 +379,55 @@ func (r *OAuth2ProxyReconciler) replaceWithOauth2Proxy(ctx context.Context, ing 
 				},
 			},
 		}
-		err = r.Create(ctx, &appsv1.Deployment{
-			ObjectMeta: om,
-			Spec: appsv1.DeploymentSpec{
-				Replicas: &one32,
-				Selector: &metav1.LabelSelector{
-					MatchLabels: map[string]string{
-						"app": opts.id,
+		ps := corev1.PodSpec{
+			Containers: []corev1.Container{{
+				Name:  opts.id,
+				Image: "quay.io/oauth2-proxy/oauth2-proxy:latest",
+				Args: []string{
+					"--upstream=" + upstream,
+					"--provider=oidc",
+					"--provider-display-name=Keycloak",
+					"--http-address=0.0.0.0:4180",
+					"--email-domain=*",
+					"--session-store-type=redis",
+					"--cookie-secure=true",
+					"--redis-connection-url=redis://" + opts.redisHost,
+					`--banner=<img src="https://microcumul.us/images/logo/logo.svg" alt="microcumulus logo" />`,
+					"--custom-sign-in-logo=-",
+				},
+				Env: env,
+				Ports: []corev1.ContainerPort{{
+					ContainerPort: 4180,
+					Protocol:      corev1.ProtocolTCP,
+				}},
+				LivenessProbe:  &probe,
+				ReadinessProbe: &probe,
+			}},
+		}
+
+		var dep appsv1.Deployment
+		err = r.Get(ctx, client.ObjectKey{Namespace: om.Namespace, Name: om.Name}, &dep)
+		if err != nil {
+			err = r.Create(ctx, &appsv1.Deployment{
+				ObjectMeta: om,
+				Spec: appsv1.DeploymentSpec{
+					Replicas: &one32,
+					Selector: &metav1.LabelSelector{
+						MatchLabels: map[string]string{
+							"proxyapp": opts.id,
+						},
+					},
+					Template: corev1.PodTemplateSpec{
+						ObjectMeta: om,
+						Spec:       ps,
 					},
 				},
-				Template: corev1.PodTemplateSpec{
-					ObjectMeta: om,
-					Spec: corev1.PodSpec{
-						Containers: []corev1.Container{{
-							Name:  opts.id,
-							Image: "quay.io/oauth2-proxy/oauth2-proxy:latest",
-							Args: []string{
-								"--upstream=$(OAUTH2_PROXY_UPSTREAM)",
-								"--provider=oidc",
-								"--provider-display-name=Keycloak",
-								"--http-address=0.0.0.0:4180",
-								"--cookie-refresh=1m",
-								"--pass-access-token",
-								"--pass-authorization-header",
-								"--email-domain=*",
-								"--session-store-type=redis",
-								"--cookie-secure=true",
-								"--redis-connection-url=redis://" + opts.redisHost,
-								`--banner=<img src="https://microcumul.us/images/logo/logo.svg" alt="microcumulus logo" />`,
-								"--custom-sign-in-logo=-",
-							},
-							Env: env,
-							Ports: []corev1.ContainerPort{{
-								ContainerPort: 4180,
-								Protocol:      corev1.ProtocolTCP,
-							}},
-							LivenessProbe:  &probe,
-							ReadinessProbe: &probe,
-						}},
-					},
-				},
-			},
-		})
+			})
+		} else {
+			dep := dep.DeepCopy()
+			dep.Spec.Template.Spec = ps
+			err = r.Update(ctx, dep)
+		}
 
 		if err != nil && !strings.Contains(err.Error(), "exists") {
 			return fmt.Errorf("error creating deployment: %w", err)

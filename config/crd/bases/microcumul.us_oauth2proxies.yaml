@@ -131,6 +131,11 @@ spec:
                       are ANDed.
                     type: object
                 type: object
+              podAnnotations:
+                additionalProperties:
+                  type: string
+                description: Pod annotations will be applied to the oauth2 proxy pods
+                type: object
               proxyOpts:
                 additionalProperties:
                   type: string
@@ -255,6 +260,7 @@ spec:
                 type: object
             required:
             - ingress
+            - podAnnotations
             - sessionStore
             type: object
           status:

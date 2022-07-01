@@ -11,6 +11,7 @@ require (
 	github.com/opentracing/opentracing-go v1.2.0
 	github.com/samber/lo v1.21.0
 	go.uber.org/multierr v1.6.0
+	golang.org/x/exp v0.0.0-20220303212507-bbda1eaf7a17
 	k8s.io/api v0.21.3
 	k8s.io/apimachinery v0.21.3
 	k8s.io/client-go v0.21.3
@@ -51,7 +52,6 @@ require (
 	github.com/spf13/pflag v1.0.5 // indirect
 	go.uber.org/atomic v1.7.0 // indirect
 	go.uber.org/zap v1.18.1 // indirect
-	golang.org/x/exp v0.0.0-20220303212507-bbda1eaf7a17 // indirect
 	golang.org/x/net v0.0.0-20220425223048-2871e0cb64e4 // indirect
 	golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d // indirect
 	golang.org/x/sys v0.0.0-20211216021012-1d35b9e2eb4e // indirect

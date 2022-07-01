@@ -58,6 +58,9 @@ type OAuth2ProxySpec struct {
 	// https://github.com/oauth2-proxy/oauth2-proxy/blob/e6223383e5ff68709afe8e47d3e91b499e5802ad/docs/docs/configuration/overview.md)
 	// if the page is gone.
 	ProxyOpts map[string]string `json:"proxyOpts,omitempty"`
+
+	// Pod annotations will be applied to the oauth2 proxy pods
+	PodAnnotations map[string]string `json:"podAnnotations"`
 }
 
 type SessionStore struct {

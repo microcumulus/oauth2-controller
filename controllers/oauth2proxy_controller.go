@@ -28,6 +28,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/opentracing/opentracing-go"
 	"github.com/samber/lo"
+	"golang.org/x/exp/maps"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkv1 "k8s.io/api/networking/v1"
@@ -252,14 +253,14 @@ type oa2ProxyOpts struct {
 	optsMap    map[string]string
 }
 
-func (r *OAuth2ProxyReconciler) replaceWithOauth2Proxy(ctx context.Context, ing *networkv1.Ingress, spec microcumulusv1beta1.OAuth2Proxy, opts oa2ProxyOpts) error {
+func (r *OAuth2ProxyReconciler) replaceWithOauth2Proxy(ctx context.Context, ing *networkv1.Ingress, prox microcumulusv1beta1.OAuth2Proxy, opts oa2ProxyOpts) error {
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "replaceWithOauth2Proxy")
 	defer sp.Finish()
 
 	updatedIng := ing.DeepCopy()
 
 	r.Log.Info("setting controller reference")
-	err := controllerutil.SetControllerReference(&spec, updatedIng, r.Scheme)
+	err := controllerutil.SetControllerReference(&prox, updatedIng, r.Scheme)
 	if err != nil {
 		r.Log.Error(err, "error setting controller reference")
 	}
@@ -317,10 +318,10 @@ func (r *OAuth2ProxyReconciler) replaceWithOauth2Proxy(ctx context.Context, ing 
 					Name:      proxName,
 					Namespace: ing.Namespace,
 					OwnerReferences: []metav1.OwnerReference{{
-						APIVersion: spec.APIVersion,
-						Kind:       spec.Kind,
-						Name:       spec.Name,
-						UID:        spec.UID,
+						APIVersion: prox.APIVersion,
+						Kind:       prox.Kind,
+						Name:       prox.Name,
+						UID:        prox.UID,
 					}},
 				},
 				StringData: m,
@@ -348,10 +349,10 @@ func (r *OAuth2ProxyReconciler) replaceWithOauth2Proxy(ctx context.Context, ing 
 				"proxyapp": opts.id,
 			},
 			OwnerReferences: []metav1.OwnerReference{{
-				APIVersion: spec.APIVersion,
-				Kind:       spec.Kind,
-				Name:       spec.Name,
-				UID:        spec.UID,
+				APIVersion: prox.APIVersion,
+				Kind:       prox.Kind,
+				Name:       prox.Name,
+				UID:        prox.UID,
 			}},
 		}
 
@@ -408,6 +409,8 @@ func (r *OAuth2ProxyReconciler) replaceWithOauth2Proxy(ctx context.Context, ing 
 		var dep appsv1.Deployment
 		err = r.Get(ctx, client.ObjectKey{Namespace: om.Namespace, Name: om.Name}, &dep)
 		if err != nil {
+			maps.Copy(dep.Annotations, prox.Spec.PodAnnotations)
+			dep.Annotations = prox.Spec.PodAnnotations
 			err = r.Create(ctx, &appsv1.Deployment{
 				ObjectMeta: om,
 				Spec: appsv1.DeploymentSpec{
@@ -425,6 +428,7 @@ func (r *OAuth2ProxyReconciler) replaceWithOauth2Proxy(ctx context.Context, ing 
 			})
 		} else {
 			dep := dep.DeepCopy()
+			maps.Copy(dep.Annotations, prox.Spec.PodAnnotations)
 			dep.Spec.Template.Spec = ps
 			err = r.Update(ctx, dep)
 		}

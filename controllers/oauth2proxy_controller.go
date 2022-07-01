@@ -130,7 +130,7 @@ func (r *OAuth2ProxyReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// 		svcs.Items = []corev1.Service{svc}
 	// }
 
-	// Check for oidc secrets values; create if not exist
+	// Check for oidc secrets values; create client spec if the secret doesn't exist
 	var sec corev1.Secret
 	err = r.Get(ctx, req.NamespacedName, &sec)
 	if err != nil {
@@ -143,6 +143,9 @@ func (r *OAuth2ProxyReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		}
 		if len(uris) == 0 {
 			return ctrl.Result{}, fmt.Errorf("no URIs present in ingress")
+		}
+		if len(spec.Spec.ExtraRedirects) > 0 {
+			uris = append(uris, spec.Spec.ExtraRedirects...)
 		}
 
 		err = r.Create(ctx, &microcumulusv1beta1.OAuth2Client{

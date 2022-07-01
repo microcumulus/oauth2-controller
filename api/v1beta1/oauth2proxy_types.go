@@ -60,7 +60,10 @@ type OAuth2ProxySpec struct {
 	ProxyOpts map[string]string `json:"proxyOpts,omitempty"`
 
 	// Pod annotations will be applied to the oauth2 proxy pods
-	PodAnnotations map[string]string `json:"podAnnotations"`
+	PodAnnotations map[string]string `json:"podAnnotations,omitempty"`
+
+	// ExtraRedirects
+	ExtraRedirects []string `json:"extraRedirects,omitempty"`
 }
 
 type SessionStore struct {

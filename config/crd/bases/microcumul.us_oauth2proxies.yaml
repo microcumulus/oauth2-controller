@@ -49,6 +49,11 @@ spec:
                 type: string
               clusterClientProvider:
                 type: string
+              extraRedirects:
+                description: ExtraRedirects
+                items:
+                  type: string
+                type: array
               ingress:
                 description: Ingress instructs the controller to replace an ingress
                   with a protected proxied version.
@@ -260,7 +265,6 @@ spec:
                 type: object
             required:
             - ingress
-            - podAnnotations
             - sessionStore
             type: object
           status:

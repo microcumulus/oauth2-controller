@@ -72,14 +72,11 @@ func (r *OAuth2ProxyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;update;patch;create;delete;list;watch
 
 func (r *OAuth2ProxyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	// lg := r.Log.WithValues("oauth2proxy", req.NamespacedName)
-
-	// your logic here
-	sp, ctx := opentracing.StartSpanFromContext(ctx, "ReplaceWithOauth2Proxy")
+	sp, ctx := opentracing.StartSpanFromContext(ctx, "OAuth2Proxy.Reconcile")
 	defer sp.Finish()
 
-	var spec microcumulusv1beta1.OAuth2Proxy
-	err := r.Get(ctx, req.NamespacedName, &spec)
+	spec := &microcumulusv1beta1.OAuth2Proxy{}
+	err := r.Get(ctx, req.NamespacedName, spec)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			return ctrl.Result{}, nil
@@ -99,12 +96,8 @@ func (r *OAuth2ProxyReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return r.handleDelete(ctx, spec, ing)
 	}
 
-	if !containsString(spec.Finalizers, finalizerStringProx) {
-		withFinal := spec.DeepCopy()
-		withFinal.Finalizers = append(withFinal.Finalizers, finalizerStringProx)
-		err = r.Update(ctx, withFinal)
-		return ctrl.Result{Requeue: true}, err
-	}
+	spec = spec.DeepCopy()
+	controllerutil.AddFinalizer(spec, finalizerStringProx)
 
 	// var svcs corev1.ServiceList
 
@@ -205,16 +198,17 @@ func (r *OAuth2ProxyReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	return ctrl.Result{}, err
 }
 
-func (r *OAuth2ProxyReconciler) getGroupClaim(ctx context.Context, spec microcumulusv1beta1.OAuth2Proxy) (string, error) {
+func (r *OAuth2ProxyReconciler) getGroupClaim(ctx context.Context, spec *microcumulusv1beta1.OAuth2Proxy) (string, error) {
+	// TODO: get this from the provider spec
 	return "groups", nil
 }
 
-func (r *OAuth2ProxyReconciler) handleDelete(ctx context.Context, spec microcumulusv1beta1.OAuth2Proxy, ing networkv1.Ingress) (ctrl.Result, error) {
+func (r *OAuth2ProxyReconciler) handleDelete(ctx context.Context, spec *microcumulusv1beta1.OAuth2Proxy, ing networkv1.Ingress) (ctrl.Result, error) {
 	if !containsString(spec.Finalizers, finalizerStringProx) { // Success case; nothing left to do
 		return ctrl.Result{}, nil
 	}
 
-	if ing.Annotations[annotPreviousRules] != "" {
+	if ing.Annotations != nil && ing.Annotations[annotPreviousRules] != "" {
 		revertedIng := ing.DeepCopy()
 		var oldRules []networkv1.IngressRule
 		err := json.Unmarshal([]byte(ing.Annotations[annotPreviousRules]), &oldRules)
@@ -235,9 +229,12 @@ func (r *OAuth2ProxyReconciler) handleDelete(ctx context.Context, spec microcumu
 		}
 	}
 
-	repl := spec.DeepCopy()
-	repl.Finalizers = removeString(repl.Finalizers, finalizerStringProx)
+	return r.finalizeProxy(ctx, spec)
+}
 
+func (r OAuth2ProxyReconciler) finalizeProxy(ctx context.Context, spec *microcumulusv1beta1.OAuth2Proxy) (ctrl.Result, error) {
+	repl := spec.DeepCopy()
+	controllerutil.RemoveFinalizer(repl, finalizerStringProx)
 	err := r.Update(ctx, repl)
 	if err != nil {
 		return ctrl.Result{Requeue: false}, fmt.Errorf("error removing finalizer: %w", err)
@@ -256,14 +253,14 @@ type oa2ProxyOpts struct {
 	optsMap    map[string]string
 }
 
-func (r *OAuth2ProxyReconciler) replaceWithOauth2Proxy(ctx context.Context, ing *networkv1.Ingress, prox microcumulusv1beta1.OAuth2Proxy, opts oa2ProxyOpts) error {
+func (r *OAuth2ProxyReconciler) replaceWithOauth2Proxy(ctx context.Context, ing *networkv1.Ingress, prox *microcumulusv1beta1.OAuth2Proxy, opts oa2ProxyOpts) error {
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "replaceWithOauth2Proxy")
 	defer sp.Finish()
 
 	updatedIng := ing.DeepCopy()
 
 	r.Log.Info("setting controller reference")
-	err := controllerutil.SetControllerReference(&prox, updatedIng, r.Scheme)
+	err := controllerutil.SetControllerReference(prox, updatedIng, r.Scheme)
 	if err != nil {
 		r.Log.Error(err, "error setting controller reference")
 	}
@@ -415,7 +412,7 @@ func (r *OAuth2ProxyReconciler) replaceWithOauth2Proxy(ctx context.Context, ing 
 			if dep.Spec.Template.Annotations == nil {
 				dep.Spec.Template.Annotations = map[string]string{}
 			}
-			maps.Copy(dep.Spec.Template.Annotations, dep.Spec.Template.Annotations)
+			maps.Copy(dep.Spec.Template.Annotations, prox.Spec.PodAnnotations)
 			dep.Annotations = prox.Spec.PodAnnotations
 			err = r.Create(ctx, &appsv1.Deployment{
 				ObjectMeta: om,
@@ -437,7 +434,7 @@ func (r *OAuth2ProxyReconciler) replaceWithOauth2Proxy(ctx context.Context, ing 
 			if dep.Spec.Template.Annotations == nil {
 				dep.Spec.Template.Annotations = map[string]string{}
 			}
-			maps.Copy(dep.Spec.Template.Annotations, dep.Spec.Template.Annotations)
+			maps.Copy(dep.Spec.Template.Annotations, prox.Spec.PodAnnotations)
 			dep.Spec.Template.Spec = ps
 			err = r.Update(ctx, dep)
 		}

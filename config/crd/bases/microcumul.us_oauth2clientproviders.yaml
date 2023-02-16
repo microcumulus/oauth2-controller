@@ -76,6 +76,10 @@ spec:
                     description: GroupClaimName configures the claim name the keycloak
                       provider will set up as a client mapper.
                     type: string
+                  pathPrefix:
+                    description: PathPrefix is the path prefix for the proxy. Most
+                      often `/auth` in older versions of keycloak.
+                    type: string
                   realm:
                     description: Realm is the keycloak Realm for which we have credentials
                       and will provision clients.

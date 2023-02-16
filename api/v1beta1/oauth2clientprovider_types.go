@@ -37,6 +37,8 @@ type OAuth2ClientProviderSpec struct {
 type KeycloakProvider struct {
 	// BaseURL is the externally-accessible base URL for the keycloak server
 	BaseURL string `json:"baseURL"`
+	// PathPrefix is the path prefix for the proxy. Most often `/auth` in older versions of keycloak.
+	PathPrefix string `json:"pathPrefix,omitempty"`
 	// Realm is the keycloak Realm for which we have credentials and will provision clients.
 	Realm string `json:"realm"`
 	// UserAuth allows the provider code to authenticate with a keycloak user/password

@@ -1,6 +1,6 @@
 module github.com/microcumulus/oauth2-controller
 
-go 1.18
+go 1.20
 
 require (
 	github.com/Nerzal/gocloak/v11 v11.2.0

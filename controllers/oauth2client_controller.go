@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 	"text/template"
 
@@ -121,7 +122,8 @@ func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	// Create the keycloak client from the current provider spec
-	cloak := gocloak.NewClient(prov.Spec.Keycloak.BaseURL, gocloak.SetAuthAdminRealms("admin/realms"), gocloak.SetAuthRealms("realms"))
+	pref := prov.Spec.Keycloak.PathPrefix
+	cloak := gocloak.NewClient(prov.Spec.Keycloak.BaseURL, gocloak.SetAuthAdminRealms(pref+"admin/realms"), gocloak.SetAuthRealms(pref+"realms"))
 	var jwt *gocloak.JWT
 	switch {
 	case prov.Spec.Keycloak.UserAuth != nil:
@@ -232,11 +234,25 @@ func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, fmt.Errorf("error creating new client: %w", err)
 	}
 
+	base := prov.Spec.Keycloak.BaseURL
+	if prov.Spec.Keycloak.PathPrefix != "" {
+		lg.Info("base", "url", base)
+		b, err := url.JoinPath(base, prov.Spec.Keycloak.PathPrefix, "/")
+		if err != nil {
+			lg.Error(err, "error joining paths")
+		} else {
+			base = b
+		}
+	}
+
 	data := map[string]string{
 		"id":        oac.Spec.ClientID,
 		"secret":    newCli.secret,
-		"issuerURL": fmt.Sprintf("%s/realms/%s", strings.TrimSuffix(prov.Spec.Keycloak.BaseURL, "/"), strings.TrimPrefix(prov.Spec.Keycloak.Realm, "/")),
+		"issuerURL": fmt.Sprintf("%s/realms/%s", strings.TrimSuffix(base, "/"), strings.TrimPrefix(prov.Spec.Keycloak.Realm, "/")),
 	}
+
+	lg.Info("issuerURL", "url", data["issuerURL"])
+
 	if oac.Spec.SecretTemplate != nil {
 		for k, tplStr := range oac.Spec.SecretTemplate {
 			lg := lg.WithValues("template", tplStr, "templateKey", k)
@@ -250,7 +266,7 @@ func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			err = tpl.Execute(buf, map[string]interface{}{
 				"ClientID":     oac.Spec.ClientID,
 				"ClientSecret": newCli.secret,
-				"IssuerURL":    fmt.Sprintf("%s/realms/%s", strings.TrimSuffix(prov.Spec.Keycloak.BaseURL, "/"), strings.TrimPrefix(prov.Spec.Keycloak.Realm, "/")),
+				"IssuerURL":    fmt.Sprintf("%s/realms/%s", strings.TrimSuffix(base, "/"), strings.TrimPrefix(prov.Spec.Keycloak.Realm, "/")),
 			})
 			if err != nil {
 				lg.Error(err, "error while executing template")

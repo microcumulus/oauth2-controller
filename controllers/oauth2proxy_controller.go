@@ -246,6 +246,7 @@ type oa2ProxyOpts struct {
 	id         string
 	secret     string
 	issuerURL  string
+	pathPrefix string
 	redisHost  string
 	redisPass  string
 	groupClaim string
@@ -259,11 +260,11 @@ func (r *OAuth2ProxyReconciler) replaceWithOauth2Proxy(ctx context.Context, ing 
 
 	updatedIng := ing.DeepCopy()
 
-	r.Log.Info("setting controller reference")
-	err := controllerutil.SetControllerReference(prox, updatedIng, r.Scheme)
-	if err != nil {
-		r.Log.Error(err, "error setting controller reference")
-	}
+	// r.Log.Info("setting controller reference")
+	// err := controllerutil.SetControllerReference(prox, updatedIng, r.Scheme)
+	// if err != nil {
+	// 	r.Log.Error(err, "error setting controller reference")
+	// }
 
 	if ing.Annotations[annotPreviousRules] == "" {
 		oldRules, _ := json.Marshal(ing.Spec.Rules)
@@ -278,7 +279,11 @@ func (r *OAuth2ProxyReconciler) replaceWithOauth2Proxy(ctx context.Context, ing 
 
 	for i, rule := range updatedIng.Spec.Rules {
 		be := rule.HTTP.Paths[0].Backend // TODO: This won't work well for path-specific backend routing :ohno:
-		upstream := fmt.Sprintf("http://%s:%d", be.Service.Name, be.Service.Port.Number)
+		proto := "http"
+		if be.Service.Port.Number == 443 || be.Service.Port.Name == "https" {
+			proto = "https"
+		}
+		upstream := fmt.Sprintf("%s://%s:%d", proto, be.Service.Name, be.Service.Port.Number)
 
 		bs := make([]byte, 16)
 		rand.Read(bs)
@@ -310,7 +315,7 @@ func (r *OAuth2ProxyReconciler) replaceWithOauth2Proxy(ctx context.Context, ing 
 
 		// Create or update secret
 		var sec corev1.Secret
-		err = r.Get(ctx, client.ObjectKey{Namespace: ing.Namespace, Name: proxName}, &sec)
+		err := r.Get(ctx, client.ObjectKey{Namespace: ing.Namespace, Name: proxName}, &sec)
 		if err != nil && strings.Contains(err.Error(), "not found") {
 			r.Log.Info("secret not found; creating")
 			err = r.Create(ctx, &corev1.Secret{
@@ -472,7 +477,7 @@ func (r *OAuth2ProxyReconciler) replaceWithOauth2Proxy(ctx context.Context, ing 
 		}
 	}
 
-	err = r.Update(ctx, updatedIng)
+	err := r.Update(ctx, updatedIng)
 	if err != nil && !strings.Contains(err.Error(), "exists") {
 		return fmt.Errorf("error updating ingress: %w", err)
 	}

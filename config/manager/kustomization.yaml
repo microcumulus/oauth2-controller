@@ -3,6 +3,6 @@ resources:
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 images:
-- digest: sha256:832271f05a3297daf3cb5751308b9e01da74c2bd3b30a01a94163bda3d17b46b
+- digest: sha256:46df6b2948e8ee166741a554c56e847628010e9ae01f2182aaa19119eb377b64
   name: controller
   newName: andrewstuart/oauth2controller

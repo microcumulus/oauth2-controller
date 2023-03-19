@@ -5,6 +5,7 @@ go 1.20
 require (
 	github.com/Nerzal/gocloak/v11 v11.2.0
 	github.com/Nerzal/gocloak/v8 v8.5.0
+	github.com/andrewstuart/p v1.0.0
 	github.com/go-logr/logr v0.4.0
 	github.com/onsi/ginkgo v1.16.4
 	github.com/onsi/gomega v1.14.0

@@ -25,6 +25,7 @@ import (
 	"text/template"
 
 	"github.com/Nerzal/gocloak/v11"
+	"github.com/andrewstuart/p"
 	"github.com/go-logr/logr"
 	"github.com/opentracing/opentracing-go"
 	"go.uber.org/multierr"
@@ -210,24 +211,28 @@ func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			"user.attribute":       "foo", // is this needed? idk. The webUI sends it in devtools.
 		}
 		mappers = append(mappers, gocloak.ProtocolMapperRepresentation{
-			Name:           gocloak.StringP("groups"),
-			Protocol:       gocloak.StringP("openid-connect"),
-			ProtocolMapper: gocloak.StringP("oidc-usermodel-realm-role-mapper"),
+			Name:           p.T("groups"),
+			Protocol:       p.T("openid-connect"),
+			ProtocolMapper: p.T("oidc-usermodel-realm-role-mapper"),
 			Config:         &conf,
 		})
 	}
 
 	cli := gocloak.Client{
-		ClientID:                &oac.Spec.ClientID,
-		RedirectURIs:            &oac.Spec.Redirects,
-		Name:                    &oac.Spec.ClientName,
-		BaseURL:                 &oac.Spec.Redirects[0],
-		ConsentRequired:         gocloak.BoolP(false),
-		AdminURL:                &oac.Spec.Redirects[0],
-		Enabled:                 gocloak.BoolP(true),
-		PublicClient:            gocloak.BoolP(false),
-		ClientAuthenticatorType: gocloak.StringP("client-secret"),
-		ProtocolMappers:         &mappers,
+		ClientID:                p.T(oac.Spec.ClientID),
+		RedirectURIs:            p.T(oac.Spec.Redirects),
+		Name:                    p.T(oac.Spec.ClientName),
+		BaseURL:                 p.T(oac.Spec.Redirects[0]),
+		ConsentRequired:         p.T(false),
+		AdminURL:                p.T(oac.Spec.Redirects[0]),
+		Enabled:                 p.T(true),
+		PublicClient:            p.T(false),
+		ClientAuthenticatorType: p.T("client-secret"),
+		ProtocolMappers:         p.T(mappers),
+	}
+	if oac.Spec.Public {
+		cli.PublicClient = p.T(true)
+		cli.ClientAuthenticatorType = nil
 	}
 
 	newCli, err := getOrCreateClient(ctx, cloak, *jwt, prov.Spec.Keycloak.Realm, cli)

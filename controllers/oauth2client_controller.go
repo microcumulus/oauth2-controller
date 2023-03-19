@@ -332,6 +332,7 @@ func getOrCreateClient(ctx context.Context, cli gocloak.GoCloak, jwt gocloak.JWT
 		ClientID: c.ClientID,
 	})
 	if err == nil && len(cl) == 1 {
+		c.ID = cl[0].ID
 		err = cli.UpdateClient(ctx, jwt.AccessToken, realm, c)
 		if err != nil {
 			return nil, fmt.Errorf("error updating client specs: %w", err)

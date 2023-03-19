@@ -332,10 +332,16 @@ func getOrCreateClient(ctx context.Context, cli gocloak.GoCloak, jwt gocloak.JWT
 		ClientID: c.ClientID,
 	})
 	if err == nil && len(cl) == 1 {
+		err = cli.UpdateClient(ctx, jwt.AccessToken, realm, c)
+		if err != nil {
+			return nil, fmt.Errorf("error updating client specs: %w", err)
+		}
+
 		cred, err := cli.GetClientSecret(ctx, jwt.AccessToken, realm, *cl[0].ID)
 		if err != nil {
 			return nil, fmt.Errorf("couldn't get client secret: %w", err)
 		}
+
 		if cred.Value != nil && *cred.Value != "" {
 			return &clientData{uid: *cl[0].ID, id: *cl[0].ClientID, secret: *cred.Value}, nil
 		}

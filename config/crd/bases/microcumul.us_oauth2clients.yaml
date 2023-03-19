@@ -48,6 +48,8 @@ spec:
                 description: Provider references the Oauth2ClientProvider or ClusterOauth2ClientProvider
                   that should provision this client.
                 type: string
+              public:
+                type: boolean
               redirects:
                 description: Redirects is the list of valid redirects for this Client
                 items:
@@ -63,6 +65,7 @@ spec:
                 type: object
             required:
             - clientName
+            - public
             - redirects
             - secretName
             type: object

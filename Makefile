@@ -33,9 +33,11 @@ install: manifests
 uninstall: manifests
 	kustomize build config/crd | kubectl delete -f -
 
-# Deploy controller in the configured Kubernetes cluster in ~/.kube/config
-deploy: docker-push manifests
+kust:
 	cd config/manager && kustomize edit set image controller=$(shell docker inspect --format "{{ index .RepoDigests 0 }}" ${IMG})
+
+# Deploy controller in the configured Kubernetes cluster in ~/.kube/config
+deploy: docker-push manifests kust
 	kustomize build config/default | kubectl apply -f -
 	-kind load docker-image ${IMG}
 

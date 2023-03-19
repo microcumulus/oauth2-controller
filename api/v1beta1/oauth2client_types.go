@@ -36,7 +36,7 @@ type OAuth2ClientSpec struct {
 	SecretName     string            `json:"secretName"`
 	SecretTemplate map[string]string `json:"secretTemplate,omitempty"`
 
-	Public bool `json:"public"`
+	Public bool `json:"public,omitempty"`
 
 	// Redirects is the list of valid redirects for this Client
 	Redirects []string `json:"redirects"`

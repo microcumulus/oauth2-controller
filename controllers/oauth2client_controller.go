@@ -185,14 +185,15 @@ func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		Namespace: req.Namespace,
 		Name:      oac.Spec.SecretName,
 	}, &sec)
+
+	noSec := false
 	if err != nil {
 		lg.Info("could not find existing secret", "error", err, "name", req.NamespacedName.String())
 	} else {
 		if uid := sec.Annotations[annotationForeignID]; uid != "" {
 			existCli, err := cloak.GetClient(ctx, jwt.AccessToken, prov.Spec.Keycloak.Realm, uid)
 			if err == nil && *existCli.Name == oac.Spec.ClientID {
-				lg.WithValues("client", oac.TypeMeta.String(), "uid", sec.Annotations[annotationForeignID]).Info("not recreating secret for matching uid")
-				return ctrl.Result{}, nil
+				noSec = true
 			}
 		}
 	}
@@ -275,6 +276,11 @@ func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 			data[k] = buf.String()
 		}
+	}
+
+	if noSec {
+		lg.WithValues("client", oac.TypeMeta.String(), "uid", sec.Annotations[annotationForeignID]).Info("not recreating secret for matching uid")
+		return ctrl.Result{}, nil
 	}
 
 	// TODO: maybe merge this with the above secret GET since it's the same.

@@ -65,7 +65,6 @@ spec:
                 type: object
             required:
             - clientName
-            - public
             - redirects
             - secretName
             type: object

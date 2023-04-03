@@ -414,12 +414,7 @@ func (r *OAuth2ProxyReconciler) replaceWithOauth2Proxy(ctx context.Context, ing 
 		var dep appsv1.Deployment
 		err = r.Get(ctx, client.ObjectKey{Namespace: om.Namespace, Name: om.Name}, &dep)
 		if err != nil {
-			if dep.Spec.Template.Annotations == nil {
-				dep.Spec.Template.Annotations = map[string]string{}
-			}
-			maps.Copy(dep.Spec.Template.Annotations, prox.Spec.PodAnnotations)
-			dep.Annotations = prox.Spec.PodAnnotations
-			err = r.Create(ctx, &appsv1.Deployment{
+			dep = appsv1.Deployment{
 				ObjectMeta: om,
 				Spec: appsv1.DeploymentSpec{
 					Replicas: &one32,
@@ -433,7 +428,13 @@ func (r *OAuth2ProxyReconciler) replaceWithOauth2Proxy(ctx context.Context, ing 
 						Spec:       ps,
 					},
 				},
-			})
+			}
+			if dep.Spec.Template.Annotations == nil {
+				dep.Spec.Template.Annotations = map[string]string{}
+			}
+			maps.Copy(dep.Spec.Template.Annotations, prox.Spec.PodAnnotations)
+			dep.Annotations = prox.Spec.PodAnnotations
+			err = r.Create(ctx, &dep)
 		} else {
 			dep := dep.DeepCopy()
 			if dep.Spec.Template.Annotations == nil {

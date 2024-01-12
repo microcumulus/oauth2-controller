@@ -194,7 +194,12 @@ func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		if uid := sec.Annotations[annotationForeignID]; uid != "" {
 			existCli, err := cloak.GetClient(ctx, jwt.AccessToken, prov.Spec.Keycloak.Realm, uid)
 			if err == nil && *existCli.Name == oac.Spec.ClientID {
-				noSec = true
+
+				// Now we need to check if the secret got imported as repeated *s or not.
+				cred, err := cloak.GetClientSecret(ctx, jwt.AccessToken, prov.Spec.Keycloak.Realm, uid)
+				if err == nil && cred.Value != nil && strings.Trim(*cred.Value, "*") != "" {
+					noSec = true
+				}
 			}
 		}
 	}

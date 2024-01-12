@@ -336,7 +336,7 @@ type clientData struct {
 	uid, id, secret string
 }
 
-func getOrCreateClient(ctx context.Context, cli gocloak.GoCloak, jwt gocloak.JWT, realm string, c gocloak.Client) (*clientData, error) {
+func getOrCreateClient(ctx context.Context, cli *gocloak.GoCloak, jwt gocloak.JWT, realm string, c gocloak.Client) (*clientData, error) {
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "getOrCreateClient")
 	defer sp.Finish()
 	cl, err := cli.GetClients(ctx, jwt.AccessToken, realm, gocloak.GetClientsParams{

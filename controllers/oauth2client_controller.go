@@ -24,7 +24,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/Nerzal/gocloak/v11"
+	"github.com/Nerzal/gocloak/v13"
 	"github.com/andrewstuart/p"
 	"github.com/go-logr/logr"
 	"github.com/opentracing/opentracing-go"
@@ -135,7 +135,7 @@ func (r *OAuth2ClientReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			return ctrl.Result{}, fmt.Errorf("error logging in: %w", err)
 		}
 
-		jwt, err = cloak.LoginAdmin(ctx, ua.Username, pass, prov.Spec.Keycloak.Realm)
+		jwt, err = cloak.LoginAdmin(ctx, ua.Username, pass, "master")
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("error logging in as admin user/pass (%s): %w", ua.Username, err)
 		}
@@ -349,9 +349,9 @@ func getOrCreateClient(ctx context.Context, cli gocloak.GoCloak, jwt gocloak.JWT
 			return nil, fmt.Errorf("error updating client specs: %w", err)
 		}
 
-		cred, err := cli.GetClientSecret(ctx, jwt.AccessToken, realm, *cl[0].ID)
+		cred, err := cli.RegenerateClientSecret(ctx, jwt.AccessToken, realm, *c.ID)
 		if err != nil {
-			return nil, fmt.Errorf("couldn't get client secret: %w", err)
+			return nil, fmt.Errorf("error regenerating secret: %w", err)
 		}
 
 		if cred.Value != nil && *cred.Value != "" {

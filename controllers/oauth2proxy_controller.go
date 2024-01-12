@@ -312,6 +312,9 @@ func (r *OAuth2ProxyReconciler) replaceWithOauth2Proxy(ctx context.Context, ing 
 		}
 
 		proxName := fmt.Sprintf("oauth2-proxy-%s-%s", opts.id, be.Service.Name)
+		if len(proxName) > 63 {
+			proxName = proxName[:63]
+		}
 
 		// Create or update secret
 		var sec corev1.Secret

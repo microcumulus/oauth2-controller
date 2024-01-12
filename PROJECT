@@ -1,4 +1,4 @@
-domain: my.domain
+domain: microcumul.us
 repo: github.com/microcumulus/oauth2-controller
 resources:
 - group: microcumul.us

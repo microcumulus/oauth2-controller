@@ -354,7 +354,7 @@ func getOrCreateClient(ctx context.Context, cli *gocloak.GoCloak, jwt gocloak.JW
 			return nil, fmt.Errorf("error updating client specs: %w", err)
 		}
 
-		cred, err := cli.RegenerateClientSecret(ctx, jwt.AccessToken, realm, *c.ID)
+		cred, err := cli.GetClientSecret(ctx, jwt.AccessToken, realm, *c.ID)
 		if err != nil {
 			return nil, fmt.Errorf("error regenerating secret: %w", err)
 		}
